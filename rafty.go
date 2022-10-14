@@ -148,10 +148,11 @@ func (r *Rafty[T, T2]) Start(ctx context.Context) error {
 			select {
 			case newWork := <-r.ch:
 				if newWork.index < r.raft.LastIndex() {
-					r.logger.Debugf("Ignoring new outdated log")
+					r.logger.Debugf("Ignoring new outdated log index: %d", newWork.index)
 					continue
 				}
-				r.logger.Infof("Received new raft log: %#v", newWork)
+				r.logger.Infof("Received new raft log")
+				r.logger.Debugf("%v", newWork)
 				r.manageWork(newWork)
 
 			case <-ctx.Done():

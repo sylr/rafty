@@ -60,8 +60,7 @@ func NewRaft[T any, T2 Work[T]](c RaftConfig, ch chan RaftLog[T, T2]) (*raft.Raf
 		}
 	}
 
-	c.Logger.Infof("Listen address: %v", listen)
-	c.Logger.Infof("Advertised address: %v", advertisedAddr)
+	c.Logger.Infof("Listen address: %v, Advertised address: %v", listen, advertisedAddr)
 
 	transport, err := raft.NewTCPTransportWithLogger(listen, advertisedAddr, 3, 10*time.Second, config.Logger.Named("raft-net"))
 	if err != nil {
@@ -155,7 +154,6 @@ func (l RaftLog[T, T2]) Diff(key raft.ServerID, targetLog RaftLog[T, T2]) (remov
 	// Looking for removed work
 	for sourceIndex, sourceElem := range source {
 		found := false
-
 		for _, targetElem := range target {
 			if sourceElem.ID() == targetElem.ID() {
 				found = true
