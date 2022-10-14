@@ -23,7 +23,6 @@ func NewRaft[T any, T2 Work[T]](c RaftConfig, ch chan RaftLog[T, T2]) (*raft.Raf
 	listen := fmt.Sprintf("%s:%d", c.ListeningAddress, c.ListeningPort)
 	config := raft.DefaultConfig()
 	config.LocalID = c.ServerID
-	//config.NoSnapshotRestoreOnStart = true
 
 	if c.HCLogger != nil {
 		config.Logger = c.HCLogger.Named("raft")
@@ -64,7 +63,6 @@ func NewRaft[T any, T2 Work[T]](c RaftConfig, ch chan RaftLog[T, T2]) (*raft.Raf
 	c.Logger.Infof("Listen address: %v", listen)
 	c.Logger.Infof("Advertised address: %v", advertisedAddr)
 
-	//transport, err := raft.NewTCPTransport(listen, advertisedAddr, 3, 10*time.Second, os.Stdout)
 	transport, err := raft.NewTCPTransportWithLogger(listen, advertisedAddr, 3, 10*time.Second, config.Logger.Named("raft-net"))
 	if err != nil {
 		return nil, err
