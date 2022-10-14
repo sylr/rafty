@@ -11,6 +11,7 @@ import (
 	"github.com/cespare/xxhash"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/raft"
+
 	"sylr.dev/rafty/discovery"
 )
 
@@ -39,8 +40,7 @@ type Rafty[T any, T2 Work[T]] struct {
 
 func New[T any, T2 Work[T]](logger Logger, disco discovery.Discoverer, foreman Foreman[T, T2], start func(context.Context, T2), opts ...Option[T, T2]) (*Rafty[T, T2], error) {
 	r := &Rafty[T, T2]{
-		logger: logger,
-
+		logger:         logger,
 		startFunc:      start,
 		discoverer:     disco,
 		foreman:        foreman,
@@ -128,16 +128,32 @@ func (r *Rafty[T, T2]) Start(ctx context.Context) error {
 	servers := r.discoverer.GetServers()
 	r.logger.Tracef("Received first servers list: %v", servers)
 
-	configuration.Servers = append(configuration.Servers, servers...)
-	fut := r.raft.BootstrapCluster(configuration)
-
-	if err := fut.Error(); err != nil {
-		if !errors.Is(err, raft.ErrCantBootstrap) {
-			return fut.Error()
+	isVoter := false
+	for _, server := range servers {
+		if server.ID == r.raftID {
+			if server.Suffrage == raft.Voter {
+				isVoter = true
+			}
 		}
 	}
 
-	r.updateServers(servers)
+	if isVoter {
+		r.logger.Infof("Server is voter, attempting to bootstrap cluster")
+		configuration.Servers = append(configuration.Servers, servers...)
+		fut := r.raft.BootstrapCluster(configuration)
+
+		if err := fut.Error(); err != nil {
+			r.logger.Tracef("Bootstrapping cluster failed: %v", err)
+			if !errors.Is(err, raft.ErrCantBootstrap) {
+				return fut.Error()
+			}
+		} else {
+			_, leaderID := r.raft.LeaderWithID()
+			if leaderID == r.raftID {
+				r.updateServers(servers)
+			}
+		}
+	}
 
 	raftObservation := make(chan raft.Observation)
 	observer := raft.NewObserver(raftObservation, false, nil)
