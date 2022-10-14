@@ -118,9 +118,9 @@ func run(cmd *cobra.Command, args []string) error {
 		discoverer,
 		works,
 		makeWork(&logger),
-		rafty.WithRaftListeningAddressPort[string, RaftyMcRaftFaceWork[string]](optionBindAddress, optionPort),
-		rafty.WithRaftAdvertisedAddress[string, RaftyMcRaftFaceWork[string]](optionAdvertisedAddress),
-		rafty.WithHCLogger[string, RaftyMcRaftFaceWork[string]](&hclogger),
+		rafty.RaftListeningAddressPort[string, RaftyMcRaftFaceWork[string]](optionBindAddress, optionPort),
+		rafty.RaftAdvertisedAddress[string, RaftyMcRaftFaceWork[string]](optionAdvertisedAddress),
+		rafty.HCLogger[string, RaftyMcRaftFaceWork[string]](&hclogger),
 	)
 	if err != nil {
 		cancel()

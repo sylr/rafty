@@ -99,14 +99,14 @@ func New[T any, T2 Work[T]](logger Logger, disco discovery.Discoverer, foreman F
 
 type Option[T any, T2 Work[T]] func(*Rafty[T, T2]) error
 
-func WithHCLogger[T any, T2 Work[T]](logger hclog.Logger) Option[T, T2] {
+func HCLogger[T any, T2 Work[T]](logger hclog.Logger) Option[T, T2] {
 	return func(r *Rafty[T, T2]) error {
 		r.hcLogger = logger
 		return nil
 	}
 }
 
-func WithRaftListeningAddressPort[T any, T2 Work[T]](address string, port int) Option[T, T2] {
+func RaftListeningAddressPort[T any, T2 Work[T]](address string, port int) Option[T, T2] {
 	return func(r *Rafty[T, T2]) error {
 		r.listeningAddress = address
 		r.listeningPort = port
@@ -114,7 +114,7 @@ func WithRaftListeningAddressPort[T any, T2 Work[T]](address string, port int) O
 	}
 }
 
-func WithRaftAdvertisedAddress[T any, T2 Work[T]](address string) Option[T, T2] {
+func RaftAdvertisedAddress[T any, T2 Work[T]](address string) Option[T, T2] {
 	return func(r *Rafty[T, T2]) error {
 		r.advertisedAddress = address
 		return nil
