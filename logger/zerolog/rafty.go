@@ -2,6 +2,7 @@ package raftyzerolog
 
 import (
 	"github.com/rs/zerolog"
+
 	"sylr.dev/rafty"
 )
 

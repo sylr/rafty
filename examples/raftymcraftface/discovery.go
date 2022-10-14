@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/raft"
+
 	"sylr.dev/rafty/discovery"
 )
 
