@@ -41,8 +41,8 @@ func (ld *LocalDiscoverer) GetServers() []raft.Server {
 		if i > 9 {
 			suffrage = raft.Nonvoter
 		} else {
-			// Make the number of voters odd
-			if i == ld.clusterSize-1 && i%2 == 1 {
+			// Make the number of voters odd if cluster size greater than 3
+			if ld.clusterSize > 3 && i == ld.clusterSize-1 && i%2 == 1 {
 				suffrage = raft.Nonvoter
 			}
 		}
