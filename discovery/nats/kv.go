@@ -14,6 +14,9 @@ import (
 	"sylr.dev/rafty/discovery"
 )
 
+// KVDiscoverer is a Rafty discoverer which leverages the use of NATS JetStream
+// key values. This discoverer will register itself upon calling Start() and
+// deregister itself when terminated.
 type KVDiscoverer struct {
 	logger         rafty.Logger
 	advertisedAddr string
@@ -30,30 +33,30 @@ type KVDiscoverer struct {
 
 var _ discovery.Discoverer = (*KVDiscoverer)(nil)
 
-type Option func(*KVDiscoverer) error
+type KVOption func(*KVDiscoverer) error
 
-func JSContext(ctx nats.JetStreamContext) Option {
+func JSContext(ctx nats.JetStreamContext) KVOption {
 	return func(disco *KVDiscoverer) error {
 		disco.jsContext = ctx
 		return nil
 	}
 }
 
-func JSBucket(bucket string) Option {
+func JSBucket(bucket string) KVOption {
 	return func(disco *KVDiscoverer) error {
 		disco.jsBucketName = bucket
 		return nil
 	}
 }
 
-func Logger(logger rafty.Logger) Option {
+func Logger(logger rafty.Logger) KVOption {
 	return func(disco *KVDiscoverer) error {
 		disco.logger = logger
 		return nil
 	}
 }
 
-func NewKVDiscoverer(advertisedAddr string, natsConn *nats.Conn, options ...Option) (*KVDiscoverer, error) {
+func NewKVDiscoverer(advertisedAddr string, natsConn *nats.Conn, options ...KVOption) (*KVDiscoverer, error) {
 	var err error
 
 	d := &KVDiscoverer{

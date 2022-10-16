@@ -16,6 +16,9 @@ import (
 	"sylr.dev/rafty/discovery"
 )
 
+// ServiceDiscoverer is a Rafty discoverer which leverages the use of Consul services.
+// This discoverer will register itself upon calling Start() and deregister itself
+// when terminated.
 type ServiceDiscoverer struct {
 	logger               rafty.Logger
 	hclogger             hclog.Logger
@@ -36,37 +39,37 @@ type ServiceDiscoverer struct {
 
 var _ discovery.Discoverer = (*ServiceDiscoverer)(nil)
 
-type Option func(*ServiceDiscoverer) error
+type ServiceOption func(*ServiceDiscoverer) error
 
-func Logger(logger rafty.Logger) Option {
+func Logger(logger rafty.Logger) ServiceOption {
 	return func(disco *ServiceDiscoverer) error {
 		disco.logger = logger
 		return nil
 	}
 }
 
-func HCLogger(logger hclog.Logger) Option {
+func HCLogger(logger hclog.Logger) ServiceOption {
 	return func(disco *ServiceDiscoverer) error {
 		disco.hclogger = logger
 		return nil
 	}
 }
 
-func Name(name string) Option {
+func Name(name string) ServiceOption {
 	return func(disco *ServiceDiscoverer) error {
 		disco.consulServiceName = name
 		return nil
 	}
 }
 
-func Tags(tags []string) Option {
+func Tags(tags []string) ServiceOption {
 	return func(disco *ServiceDiscoverer) error {
 		disco.consulServiceTags = tags
 		return nil
 	}
 }
 
-func NewServiceDiscoverer(advertisedAddr string, advertisedPort int, consulClient *api.Client, options ...Option) (*ServiceDiscoverer, error) {
+func NewServiceDiscoverer(advertisedAddr string, advertisedPort int, consulClient *api.Client, options ...ServiceOption) (*ServiceDiscoverer, error) {
 	d := &ServiceDiscoverer{
 		advertisedAddr:  advertisedAddr,
 		advertisedPort:  advertisedPort,
@@ -194,7 +197,7 @@ func (d *ServiceDiscoverer) GetServers() []raft.Server {
 }
 
 func (d *ServiceDiscoverer) getServers() []raft.Server {
-	opts := &api.QueryOptions{AllowStale: false, RequireConsistent: true, UseCache: true}
+	opts := &api.QueryServiceOptions{AllowStale: false, RequireConsistent: true, UseCache: true}
 	members, _, err := d.consulClient.Health().Service(d.consulServiceName, "", true, opts)
 	if err != nil {
 		d.logger.Errorf("disco-consul-service: failed to get services: %w", err)

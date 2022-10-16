@@ -16,6 +16,7 @@ import (
 
 var _ discovery.Discoverer = (*SRVDiscoverer)(nil)
 
+// SRVDiscoverer is a Rafty discoverer which leverages the use of DNS and SRV records.
 type SRVDiscoverer struct {
 	logger         rafty.Logger
 	client         *dns.Client
@@ -28,37 +29,37 @@ type SRVDiscoverer struct {
 	mux            sync.Mutex
 }
 
-type Option func(*SRVDiscoverer) error
+type SRVOption func(*SRVDiscoverer) error
 
-func Logger(logger rafty.Logger) Option {
+func Logger(logger rafty.Logger) SRVOption {
 	return func(disco *SRVDiscoverer) error {
 		disco.logger = logger
 		return nil
 	}
 }
 
-func Client(client *dns.Client) Option {
+func Client(client *dns.Client) SRVOption {
 	return func(disco *SRVDiscoverer) error {
 		disco.client = client
 		return nil
 	}
 }
 
-func Interval(interval time.Duration) Option {
+func Interval(interval time.Duration) SRVOption {
 	return func(disco *SRVDiscoverer) error {
 		disco.interval = interval
 		return nil
 	}
 }
 
-func Nameserver(nameserver string) Option {
+func Nameserver(nameserver string) SRVOption {
 	return func(disco *SRVDiscoverer) error {
 		disco.nameserver = nameserver
 		return nil
 	}
 }
 
-func NewSRVDiscoverer(srvRecord string, options ...Option) (*SRVDiscoverer, error) {
+func NewSRVDiscoverer(srvRecord string, options ...SRVOption) (*SRVDiscoverer, error) {
 	d := &SRVDiscoverer{
 		maxVoters: 9,
 		interval:  10 * time.Second,
@@ -137,6 +138,7 @@ func (d *SRVDiscoverer) getServers() []raft.Server {
 	msg := dns.Msg{}
 	msg.SetQuestion(d.record, dns.TypeSRV)
 	msg.SetEdns0(4096, true)
+
 	r, _, err := d.client.Exchange(&msg, d.nameserver)
 	if err != nil {
 		d.logger.Errorf("dns-disco: fail to query nameserver: %w", err)
@@ -144,7 +146,6 @@ func (d *SRVDiscoverer) getServers() []raft.Server {
 	}
 
 	servers := make([]raft.Server, 0, len(r.Answer))
-
 	for i, a := range r.Answer {
 		if srv, ok := a.(*dns.SRV); ok {
 			suffrage := raft.Nonvoter
