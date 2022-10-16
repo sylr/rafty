@@ -169,8 +169,8 @@ func (r *Rafty[T, T2]) Start(ctx context.Context) error {
 					r.logger.Debugf("Ignoring new outdated log index: %d", newWork.index)
 					continue
 				}
-				r.logger.Infof("Received new raft log")
-				r.logger.Debugf("%v", newWork)
+				r.logger.Infof("Received new raft log (index=%d)", newWork.index)
+				r.logger.Tracef("%v", newWork)
 				r.manageWork(newWork)
 
 			case <-ctx.Done():
@@ -279,14 +279,13 @@ func (r *Rafty[T, T2]) Done() chan struct{} {
 
 func (r *Rafty[T, T2]) leader(newWork []T2) {
 	distributed := r.distributeWork(newWork)
+	r.logger.Infof("Distributed work: %v", distributed)
 
 	js, err := json.Marshal(distributed)
 	if err != nil {
 		r.logger.Errorf("Error while marshaling work: %s", err)
 		return
 	}
-
-	r.logger.Infof("Applying work: %s", js)
 
 	fut := r.raft.Apply(js, time.Second)
 	if err := fut.Error(); err != nil {
@@ -334,7 +333,7 @@ func (r *Rafty[T, T2]) updateServers(servers []raft.Server) {
 				r.logger.Debugf("Adding new server as voter to cluster: %s found=%v updated=%v", server.ID, found, updated)
 				fut = r.raft.AddVoter(server.ID, server.Address, 0, time.Second)
 			} else {
-				r.logger.Debugf("Adding new server as voter to cluster: %s found=%v updated=%v", server.ID, found, updated)
+				r.logger.Debugf("Adding new server as non voter to cluster: %s found=%v updated=%v", server.ID, found, updated)
 				fut = r.raft.AddNonvoter(server.ID, server.Address, 0, time.Second)
 			}
 
