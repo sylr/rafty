@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/hashicorp/go-hclog v1.3.1
 	github.com/rs/zerolog v1.28.0
-	sylr.dev/rafty v0.0.0-20220815194755-135ec66ba527
+	sylr.dev/rafty v0.0.0-20221016184157-7df208ce6017
 )
 
 require (
