@@ -104,15 +104,16 @@ func (d *ServiceDiscoverer) Start(ctx context.Context) error {
 		return err
 	}
 
+	serviceID := fmt.Sprintf("%s:%d", d.advertisedAddr, d.advertisedPort)
 	reg := &api.AgentServiceRegistration{
-		ID:      fmt.Sprintf("%s:%d", d.advertisedAddr, d.advertisedPort),
+		ID:      serviceID,
 		Name:    d.consulServiceName,
 		Address: d.advertisedAddr,
 		Port:    d.advertisedPort,
 		Tags:    d.consulServiceTags,
 		Checks: api.AgentServiceChecks{
 			&api.AgentServiceCheck{
-				TCP:      fmt.Sprintf("%s:%d", d.advertisedAddr, d.advertisedPort),
+				TCP:      serviceID,
 				Interval: (5 * time.Second).String(),
 				Timeout:  (1 * time.Second).String(),
 				Notes:    "Raft port",
