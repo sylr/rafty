@@ -5,7 +5,7 @@ import "github.com/hashicorp/raft"
 // Discoverer is the mechanism Rafty uses to discover other Rafty processes.
 type Discoverer interface {
 	// NewServers returns a channel that is used to notify Rafty that there is a
-	// new list of servers available. Although no required, it is better that
+	// new list of servers available. Although not required, it is better that
 	// notifications are sent only when the list of servers has changed.
 	NewServers() chan struct{}
 
