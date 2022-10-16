@@ -112,6 +112,7 @@ func (d *ServiceDiscoverer) Start(ctx context.Context) error {
 				TCP:      fmt.Sprintf("%s:%d", d.advertisedAddr, d.advertisedPort),
 				Interval: (5 * time.Second).String(),
 				Timeout:  (1 * time.Second).String(),
+				Notes:    "Raft port",
 			},
 		},
 	}
