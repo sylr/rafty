@@ -93,7 +93,7 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	hclogger := raftyzerolog.HCLogger{Logger: subLogger}
-	raftylogger := raftyzerolog.RaftyLogger{Logger: subLogger}
+	raftylogger := raftyzerolog.RaftyLogger{Logger: subLogger.With().Str("name", "rafty").Logger()}
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 
