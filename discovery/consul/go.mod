@@ -1,4 +1,4 @@
-module sylr.dev/rafty/discovery/nats
+module sylr.dev/rafty/discovery/consul
 
 go 1.19
 
