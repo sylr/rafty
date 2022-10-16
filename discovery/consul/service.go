@@ -197,7 +197,7 @@ func (d *ServiceDiscoverer) GetServers() []raft.Server {
 }
 
 func (d *ServiceDiscoverer) getServers() []raft.Server {
-	opts := &api.QueryServiceOptions{AllowStale: false, RequireConsistent: true, UseCache: true}
+	opts := &api.QueryOptions{AllowStale: false, RequireConsistent: true, UseCache: true}
 	members, _, err := d.consulClient.Health().Service(d.consulServiceName, "", true, opts)
 	if err != nil {
 		d.logger.Errorf("disco-consul-service: failed to get services: %w", err)
