@@ -1,6 +1,11 @@
 package rafty
 
-import "github.com/hashicorp/go-hclog"
+import (
+	"fmt"
+	"os"
+
+	"github.com/hashicorp/go-hclog"
+)
 
 type Logger interface {
 	Tracef(format string, fields ...interface{})
@@ -42,4 +47,29 @@ func (l *NullLogger) Warnf(format string, args ...interface{}) {
 
 func (l *NullLogger) Errorf(format string, args ...interface{}) {
 
+}
+
+var _ Logger = (*StdLogger)(nil)
+
+// StdLogger is a logger which logs on standard outputs
+type StdLogger struct{}
+
+func (l *StdLogger) Tracef(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stdout, format+"\n", args...)
+}
+
+func (l *StdLogger) Debugf(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stdout, format+"\n", args...)
+}
+
+func (l *StdLogger) Infof(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stdout, format+"\n", args...)
+}
+
+func (l *StdLogger) Warnf(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stdout, format+"\n", args...)
+}
+
+func (l *StdLogger) Errorf(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
 }
