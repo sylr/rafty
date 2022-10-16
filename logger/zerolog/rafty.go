@@ -14,21 +14,21 @@ type RaftyLogger struct {
 }
 
 func (l *RaftyLogger) Tracef(format string, args ...interface{}) {
-	l.Logger.Trace().Msgf(format, args...)
+	l.Trace().Msgf(format, args...)
 }
 
 func (l *RaftyLogger) Debugf(format string, args ...interface{}) {
-	l.Logger.Debug().Msgf(format, args...)
+	l.Debug().Msgf(format, args...)
 }
 
 func (l *RaftyLogger) Infof(format string, args ...interface{}) {
-	l.Logger.Info().Msgf(format, args...)
+	l.Info().Msgf(format, args...)
 }
 
 func (l *RaftyLogger) Warnf(format string, args ...interface{}) {
-	l.Logger.Warn().Msgf(format, args...)
+	l.Warn().Msgf(format, args...)
 }
 
 func (l *RaftyLogger) Errorf(format string, args ...interface{}) {
-	l.Logger.Error().Msgf(format, args...)
+	l.Error().Msgf(format, args...)
 }
