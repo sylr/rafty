@@ -8,7 +8,7 @@ import (
 
 var _ rafty.Logger = (*RaftyLogger)(nil)
 
-// Logger is a wrapper around zerolog.Logger that implements hclog.Logger.
+// RaftyLogger is a wrapper around zerolog.Logger that implements rafty.Logger.
 type RaftyLogger struct {
 	zerolog.Logger
 }
