@@ -84,7 +84,11 @@ func NewServiceDiscoverer(advertisedAddr string, advertisedPort int, consulClien
 	}
 
 	if d.advertisedAddr == "" {
-		return nil, errors.New("consul-disco: advertisedAddr is required")
+		return nil, errors.New("disco-consul-service: advertisedAddr is required")
+	}
+
+	if d.logger == nil {
+		d.logger = &rafty.NullLogger{}
 	}
 
 	return d, nil
@@ -112,12 +116,12 @@ func (d *ServiceDiscoverer) Start(ctx context.Context) error {
 		},
 	}
 	if err := d.consulClient.Agent().ServiceRegister(reg); err != nil {
-		return fmt.Errorf("consul-disco: failed to register service: %w", err)
+		return fmt.Errorf("disco-consul-service: failed to register service: %w", err)
 	}
 
 	params := map[string]interface{}{"type": "service", "service": d.consulServiceName}
 	if d.consulServiceWatcher, err = watch.Parse(params); err != nil {
-		return fmt.Errorf("consul-disco: failed to create services watcher plan: %w", err)
+		return fmt.Errorf("disco-consul-service: failed to create services watcher plan: %w", err)
 	}
 
 	d.consulServiceWatcher.HybridHandler = d.makeServiceWatcherHandler(ctx)
@@ -125,7 +129,7 @@ func (d *ServiceDiscoverer) Start(ctx context.Context) error {
 	go func() {
 		err := d.consulServiceWatcher.RunWithClientAndHclog(d.consulClient, d.hclogger)
 		if err != nil {
-			d.logger.Errorf("consul-disco: watcher failed: %w", err)
+			d.logger.Errorf("disco-consul-service: watcher failed: %w", err)
 		}
 	}()
 	go d.watcher(ctx)
@@ -166,7 +170,7 @@ func (d *ServiceDiscoverer) watcher(ctx context.Context) {
 		case <-ctx.Done():
 			serviceID := fmt.Sprintf("%s:%d", d.advertisedAddr, d.advertisedPort)
 			if err := d.consulClient.Agent().ServiceDeregister(serviceID); err != nil {
-				d.logger.Errorf("consul-disco: failed to deregister catalog: %w", err)
+				d.logger.Errorf("disco-consul-service: failed to deregister service `%s`: %w", serviceID, err)
 			}
 			return
 		}
@@ -192,7 +196,7 @@ func (d *ServiceDiscoverer) getServers() []raft.Server {
 	opts := &api.QueryOptions{AllowStale: false, RequireConsistent: true, UseCache: true}
 	members, _, err := d.consulClient.Health().Service(d.consulServiceName, "", true, opts)
 	if err != nil {
-		d.logger.Errorf("consul-disco: failed to get services: %w", err)
+		d.logger.Errorf("disco-consul-service: failed to get services: %w", err)
 		return nil
 	}
 

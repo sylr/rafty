@@ -138,7 +138,7 @@ func (d *KVDiscoverer) ticker(ctx context.Context) {
 
 		_, err := d.jsKeyValue.Put(key, []byte(time.Now().Format(time.RFC3339Nano)))
 		if err != nil {
-			d.logger.Errorf("nats-js-disco ticker put key: %s", err)
+			d.logger.Errorf("disco-nats-kv: ticker put key: %s", err)
 		}
 	}
 
@@ -153,14 +153,14 @@ func (d *KVDiscoverer) ticker(ctx context.Context) {
 			key := strings.ReplaceAll(d.advertisedAddr, ":", "__")
 			key = strings.ReplaceAll(key, ".", "_")
 
-			d.logger.Debugf("nats-js-disco ticker deleting key: %s", key)
+			d.logger.Debugf("disco-nats-kv: deleting key: %s", key)
 
 			err := d.jsKeyValue.Delete(key)
 			if err != nil {
-				d.logger.Errorf("nats-js-disco ticker delete key: %s", err)
+				d.logger.Errorf("disco-nats-kv: failed to delete key: %s", err)
 			}
 
-			d.logger.Debugf("nats-js-disco ticker key deleted: %s", key)
+			d.logger.Debugf("disco-nats-kv: key deleted: %s", key)
 
 			return
 		}
@@ -171,7 +171,7 @@ func (d *KVDiscoverer) watcher(ctx context.Context) {
 WATCH:
 	watcher, err := d.jsKeyValue.WatchAll()
 	if err != nil {
-		d.logger.Errorf("nats-js-disco: %s", err)
+		d.logger.Errorf("disco-nats-kv:: %s", err)
 		time.Sleep(time.Second * 2)
 		goto WATCH
 	}
@@ -215,7 +215,7 @@ func (d *KVDiscoverer) GetServers() []raft.Server {
 func (d *KVDiscoverer) getServers() []raft.Server {
 	keys, err := d.jsKeyValue.Keys()
 	if err != nil {
-		d.logger.Errorf("nats-js-disco get keys: %s", err)
+		d.logger.Errorf("disco-nats-kv: get keys: %s", err)
 		return nil
 	}
 
@@ -223,13 +223,13 @@ func (d *KVDiscoverer) getServers() []raft.Server {
 	for _, key := range keys {
 		rev, err := d.jsKeyValue.Get(key)
 		if err != nil {
-			d.logger.Errorf("nats-js-disco fetch key: %s", err)
+			d.logger.Errorf("disco-nats-kv: fetch key: %s", err)
 			return nil
 		}
 
 		lastUpdate, err := time.Parse(time.RFC3339Nano, string(rev.Value()))
 		if err != nil {
-			d.logger.Errorf("nats-js-disco parsing key value: %s", err)
+			d.logger.Errorf("disco-nats-kv: parsing key value: %s", err)
 			return nil
 		}
 
@@ -243,7 +243,7 @@ func (d *KVDiscoverer) getServers() []raft.Server {
 				Suffrage: raft.Voter,
 			})
 		} else {
-			d.logger.Debugf("nats-js-disco discarding stale server: %s", advertisedAddr)
+			d.logger.Debugf("disco-nats-kv: discarding stale server: %s", advertisedAddr)
 		}
 	}
 
