@@ -1,10 +1,10 @@
-raft0: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10000
-raft1: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10001
-raft2: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10002
-raft3: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10003
-raft4: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10004
-raft5: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10005
-raft6: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10006
-raft7: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10007
-raft8: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10008
-raft9: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10009
+raft0: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10000 --consul
+raft1: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10001 --consul
+raft2: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10002 --consul
+raft3: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10003 --consul
+raft4: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10004 --consul
+raft5: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10005 --consul
+raft6: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10006 --consul
+raft7: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10007 --consul
+raft8: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10008 --consul
+raft9: ./raftymcraftface --bind-address=0.0.0.0 --advertised-address=127.0.0.1 --port 10009 --consul

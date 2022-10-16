@@ -5,9 +5,13 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
+	"runtime/debug"
 	"syscall"
 	"time"
 
+	consul "github.com/hashicorp/consul/api"
+	"github.com/hashicorp/go-hclog"
 	"github.com/nats-io/jsm.go/natscontext"
 	"github.com/nats-io/nats.go"
 	"github.com/rs/zerolog"
@@ -15,6 +19,7 @@ import (
 
 	"sylr.dev/rafty"
 	"sylr.dev/rafty/discovery"
+	discoconsul "sylr.dev/rafty/discovery/consul"
 	disconats "sylr.dev/rafty/discovery/nats"
 	raftyzerolog "sylr.dev/rafty/logger/zerolog"
 )
@@ -24,7 +29,9 @@ var (
 	optionAdvertisedAddress string
 	optionPort              int
 	optionClusterSize       int
+	optionConsul            bool
 	optionNats              bool
+	optionNatsContext       string
 	optionNatsURL           string
 	optionLogCaller         bool
 	optionVerbose           int
@@ -41,7 +48,9 @@ func init() {
 	raftyMcRaftFace.PersistentFlags().StringVar(&optionAdvertisedAddress, "advertised-address", "127.0.0.1", "Raft Address to advertise on the cluster")
 	raftyMcRaftFace.PersistentFlags().IntVar(&optionPort, "port", 10000, "Raft Port to bind to")
 	raftyMcRaftFace.PersistentFlags().IntVar(&optionClusterSize, "cluster-size", 10, "Raft cluster size")
+	raftyMcRaftFace.PersistentFlags().BoolVar(&optionConsul, "consul", false, "Use Consul disco")
 	raftyMcRaftFace.PersistentFlags().BoolVar(&optionNats, "nats", false, "Use Nats disco")
+	raftyMcRaftFace.PersistentFlags().StringVar(&optionNatsContext, "nats-context", "", "Choose a Nats context")
 	raftyMcRaftFace.PersistentFlags().StringVar(&optionNatsURL, "nats-url", "", "Nats URL")
 	raftyMcRaftFace.PersistentFlags().CountVarP(&optionVerbose, "verbose", "v", "Increase verbosity")
 	raftyMcRaftFace.PersistentFlags().BoolVar(&optionLogCaller, "log-caller", false, "Log caller")
@@ -76,62 +85,35 @@ func run(cmd *cobra.Command, args []string) error {
 		subLogger = subLogger.With().CallerWithSkipFrameCount(3).Logger()
 	}
 
-	logger.Info().Msg("Starting RaftyMcRaftFace")
+	buildInfo, ok := debug.ReadBuildInfo()
+	if ok {
+		logger.Info().Msgf("Starting RaftyMcRaftFace version=%s go=%s", buildInfo.Main.Version, runtime.Version())
+	} else {
+		logger.Info().Msg("Starting RaftyMcRaftFace")
+	}
 
 	hclogger := raftyzerolog.HCLogger{Logger: subLogger}
 	raftylogger := raftyzerolog.RaftyLogger{Logger: subLogger}
-
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 
+	var err error
 	var discoverer discovery.Discoverer
-
 	if optionNats {
-		var natsConn *nats.Conn
-		if ctx, err := natscontext.New("", true); err != nil {
-			natsConn, err = nats.Connect(optionNatsURL, nats.Name("raftymcraftface"))
-			if err != nil {
-				cancel()
-				return fmt.Errorf("failed to connect to nats: %w", err)
-			}
-		} else {
-			natsConn, err = ctx.Connect(nats.Name("raftymcraftface"))
-			if err != nil {
-				logger.Debug().Err(err).Msg("Unable to create nats conn with context")
-				natsConn, err = nats.Connect(optionNatsURL, nats.Name("raftymcraftface"))
-				if err != nil {
-					cancel()
-					return fmt.Errorf("failed to connect to nats: %w", err)
-				}
-			}
-		}
-
-		logger.Info().Msgf("nats servers discovered: %v", natsConn.DiscoveredServers())
-
-		natsJSDiscoverer, err := disconats.NewNatsJSDiscoverer(
-			fmt.Sprintf("%s:%d", optionAdvertisedAddress, optionPort),
-			natsConn,
-			disconats.Logger(&raftylogger),
-			disconats.JSBucket("raftymcraftface"),
-		)
-		if err != nil {
-			cancel()
+		logger.Info().Msg("Using NATS KV discovery")
+		if discoverer, err = makeNatsKVDiscoverer(ctx, &raftylogger); err != nil {
 			return err
 		}
-
-		go natsJSDiscoverer.Start(ctx)
-		discoverer = natsJSDiscoverer
-	} else {
-		LocalDiscoverer := &LocalDiscoverer{
-			advertisedAddr: optionAdvertisedAddress,
-			startPort:      10000,
-			clusterSize:    optionClusterSize,
-			ch:             make(chan struct{}),
-			interval:       time.Minute,
+	} else if optionConsul {
+		logger.Info().Msg("Using Consul service discovery")
+		if discoverer, err = makeConsulServiceDiscoverer(ctx, &raftylogger, &hclogger); err != nil {
+			return err
 		}
-
-		go LocalDiscoverer.Start(ctx)
-		discoverer = LocalDiscoverer
+	} else {
+		logger.Info().Msg("Using local discovery")
+		if discoverer, err = makeLocalDiscoverer(ctx, &raftylogger); err != nil {
+			return err
+		}
 	}
 
 	works := &RaftyMcRaftFaceWorks[string]{
@@ -159,7 +141,6 @@ func run(cmd *cobra.Command, args []string) error {
 
 	err = r.Start(ctx)
 	if err != nil {
-		cancel()
 		logger.Trace().Err(err).Msg("Start Rafty failed")
 		return err
 	}
@@ -173,6 +154,84 @@ func run(cmd *cobra.Command, args []string) error {
 	<-r.Done()
 
 	return nil
+}
+
+func makeNatsKVDiscoverer(ctx context.Context, logger rafty.Logger) (discovery.Discoverer, error) {
+	var err error
+	var natsConn *nats.Conn
+
+	if len(optionNatsURL) > 0 {
+		natsConn, err = nats.Connect(optionNatsURL, nats.Name("raftymcraftface"))
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to nats: %w", err)
+		}
+	} else if ctx, err := natscontext.New(optionNatsContext, true); err != nil {
+		natsConn, err = ctx.Connect(nats.Name("raftymcraftface"))
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to nats: %w", err)
+		}
+	} else {
+		return nil, fmt.Errorf("unable to create nats connection")
+	}
+
+	logger.Infof("nats servers discovered: %v", natsConn.DiscoveredServers())
+
+	natsKVDiscoverer, err := disconats.NewKVDiscoverer(
+		fmt.Sprintf("%s:%d", optionAdvertisedAddress, optionPort),
+		natsConn,
+		disconats.Logger(logger),
+		disconats.JSBucket("raftymcraftface"),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	natsKVDiscoverer.Start(ctx)
+
+	return natsKVDiscoverer, nil
+}
+
+func makeConsulServiceDiscoverer(ctx context.Context, logger rafty.Logger, hclogger hclog.Logger) (discovery.Discoverer, error) {
+	config := consul.DefaultConfigWithLogger(hclogger)
+	client, err := consul.NewClient(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to consul: %w", err)
+	}
+
+	consulDiscoverer, err := discoconsul.NewServiceDiscoverer(
+		optionAdvertisedAddress,
+		optionPort,
+		client,
+		discoconsul.Logger(logger),
+		discoconsul.HCLogger(hclogger),
+		discoconsul.Name("raftymcraftface"),
+		discoconsul.Tags([]string{"raftymcraftface"}),
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	err = consulDiscoverer.Start(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return consulDiscoverer, nil
+}
+
+func makeLocalDiscoverer(ctx context.Context, _ rafty.Logger) (discovery.Discoverer, error) {
+	localDiscoverer := &LocalDiscoverer{
+		advertisedAddr: optionAdvertisedAddress,
+		startPort:      10000,
+		clusterSize:    optionClusterSize,
+		ch:             make(chan struct{}),
+		interval:       time.Minute,
+	}
+
+	go localDiscoverer.Start(ctx)
+
+	return localDiscoverer, nil
 }
 
 func makeWork[T string, T2 RaftyMcRaftFaceWork[T]](logger *zerolog.Logger) func(ctx context.Context, nw T2) {

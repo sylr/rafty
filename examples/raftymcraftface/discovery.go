@@ -32,6 +32,10 @@ func (ld *LocalDiscoverer) Start(ctx context.Context) {
 	}
 }
 
+func (ld *LocalDiscoverer) NewServers() chan struct{} {
+	return ld.ch
+}
+
 func (ld *LocalDiscoverer) GetServers() []raft.Server {
 	servers := make([]raft.Server, ld.clusterSize)
 
@@ -56,8 +60,4 @@ func (ld *LocalDiscoverer) GetServers() []raft.Server {
 	}
 
 	return servers
-}
-
-func (ld *LocalDiscoverer) NewServers() chan struct{} {
-	return ld.ch
 }
