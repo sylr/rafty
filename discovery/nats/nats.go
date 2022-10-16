@@ -14,7 +14,7 @@ import (
 	"sylr.dev/rafty/discovery"
 )
 
-type NatsJSDiscoverer struct {
+type KVDiscoverer struct {
 	logger         rafty.Logger
 	advertisedAddr string
 	natsConn       *nats.Conn
@@ -28,35 +28,35 @@ type NatsJSDiscoverer struct {
 	mux            sync.Mutex
 }
 
-var _ discovery.Discoverer = (*NatsJSDiscoverer)(nil)
+var _ discovery.Discoverer = (*KVDiscoverer)(nil)
 
-type Option func(*NatsJSDiscoverer) error
+type Option func(*KVDiscoverer) error
 
 func JSContext(ctx nats.JetStreamContext) Option {
-	return func(disco *NatsJSDiscoverer) error {
+	return func(disco *KVDiscoverer) error {
 		disco.jsContext = ctx
 		return nil
 	}
 }
 
 func JSBucket(bucket string) Option {
-	return func(disco *NatsJSDiscoverer) error {
+	return func(disco *KVDiscoverer) error {
 		disco.jsBucketName = bucket
 		return nil
 	}
 }
 
 func Logger(logger rafty.Logger) Option {
-	return func(disco *NatsJSDiscoverer) error {
+	return func(disco *KVDiscoverer) error {
 		disco.logger = logger
 		return nil
 	}
 }
 
-func NewNatsJSDiscoverer(advertisedAddr string, natsConn *nats.Conn, options ...Option) (*NatsJSDiscoverer, error) {
+func NewKVDiscoverer(advertisedAddr string, natsConn *nats.Conn, options ...Option) (*KVDiscoverer, error) {
 	var err error
 
-	d := &NatsJSDiscoverer{
+	d := &KVDiscoverer{
 		advertisedAddr: advertisedAddr,
 		natsConn:       natsConn,
 		ch:             make(chan struct{}),
@@ -118,16 +118,16 @@ func NewNatsJSDiscoverer(advertisedAddr string, natsConn *nats.Conn, options ...
 	return d, nil
 }
 
-func (d *NatsJSDiscoverer) Start(ctx context.Context) {
+func (d *KVDiscoverer) Start(ctx context.Context) {
 	go d.watcher(ctx)
 	go d.ticker(ctx)
 }
 
-func (d *NatsJSDiscoverer) Done() chan struct{} {
+func (d *KVDiscoverer) Done() chan struct{} {
 	return d.done
 }
 
-func (d *NatsJSDiscoverer) ticker(ctx context.Context) {
+func (d *KVDiscoverer) ticker(ctx context.Context) {
 	defer func() {
 		d.done <- struct{}{}
 	}()
@@ -167,7 +167,7 @@ func (d *NatsJSDiscoverer) ticker(ctx context.Context) {
 	}
 }
 
-func (d *NatsJSDiscoverer) watcher(ctx context.Context) {
+func (d *KVDiscoverer) watcher(ctx context.Context) {
 WATCH:
 	watcher, err := d.jsKeyValue.WatchAll()
 	if err != nil {
@@ -197,11 +197,11 @@ WATCH:
 	}
 }
 
-func (d *NatsJSDiscoverer) NewServers() chan struct{} {
+func (d *KVDiscoverer) NewServers() chan struct{} {
 	return d.ch
 }
 
-func (d *NatsJSDiscoverer) GetServers() []raft.Server {
+func (d *KVDiscoverer) GetServers() []raft.Server {
 	d.mux.Lock()
 	defer d.mux.Unlock()
 
@@ -212,7 +212,7 @@ func (d *NatsJSDiscoverer) GetServers() []raft.Server {
 	return d.currentServers
 }
 
-func (d *NatsJSDiscoverer) getServers() []raft.Server {
+func (d *KVDiscoverer) getServers() []raft.Server {
 	keys, err := d.jsKeyValue.Keys()
 	if err != nil {
 		d.logger.Errorf("nats-js-disco get keys: %s", err)
