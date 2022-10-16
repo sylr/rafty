@@ -77,6 +77,10 @@ func NewSRVDiscoverer(srvRecord string, options ...SRVOption) (*SRVDiscoverer, e
 		d.client = &dns.Client{}
 	}
 
+	if d.logger == nil {
+		d.logger = &rafty.NullLogger{}
+	}
+
 	if len(d.nameserver) == 0 {
 		config, err := dns.ClientConfigFromFile("/etc/resolv.conf")
 		if err != nil {
