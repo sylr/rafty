@@ -1,10 +1,10 @@
 package main
 
 import (
-	"sylr.dev/rafty"
+	. "sylr.dev/rafty/interfaces"
 )
 
-var _ rafty.Work[string] = (*RaftyMcRaftFaceWork[string])(nil)
+var _ Work[string] = (*RaftyMcRaftFaceWork[string])(nil)
 
 type RaftyMcRaftFaceWork[T ~string] string
 
@@ -22,7 +22,7 @@ func (w RaftyMcRaftFaceWork[T]) Equals(t T) bool {
 
 // -----------------------------------------------------------------------------
 
-var _ rafty.Foreman[string, RaftyMcRaftFaceWork[string]] = (*RaftyMcRaftFaceWorks[string])(nil)
+var _ Foreman[string, RaftyMcRaftFaceWork[string]] = (*RaftyMcRaftFaceWorks[string])(nil)
 
 type RaftyMcRaftFaceWorks[T ~string] struct {
 	works []RaftyMcRaftFaceWork[T]

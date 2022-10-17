@@ -10,15 +10,16 @@ import (
 	"github.com/hashicorp/raft"
 	"github.com/miekg/dns"
 
-	"sylr.dev/rafty"
 	"sylr.dev/rafty/discovery"
+	"sylr.dev/rafty/interfaces"
+	"sylr.dev/rafty/logger"
 )
 
-var _ discovery.Discoverer = (*SRVDiscoverer)(nil)
+var _ interfaces.Discoverer = (*SRVDiscoverer)(nil)
 
 // SRVDiscoverer is a Rafty discoverer which leverages the use of DNS and SRV records.
 type SRVDiscoverer struct {
-	logger         rafty.Logger
+	logger         interfaces.Logger
 	client         *dns.Client
 	nameserver     string
 	record         string
@@ -31,7 +32,7 @@ type SRVDiscoverer struct {
 
 type SRVOption func(*SRVDiscoverer) error
 
-func Logger(logger rafty.Logger) SRVOption {
+func Logger(logger interfaces.Logger) SRVOption {
 	return func(disco *SRVDiscoverer) error {
 		disco.logger = logger
 		return nil
@@ -78,7 +79,7 @@ func NewSRVDiscoverer(srvRecord string, options ...SRVOption) (*SRVDiscoverer, e
 	}
 
 	if d.logger == nil {
-		d.logger = &rafty.NullLogger{}
+		d.logger = &logger.NullLogger{}
 	}
 
 	if len(d.nameserver) == 0 {

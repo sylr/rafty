@@ -12,15 +12,16 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/raft"
 
-	"sylr.dev/rafty"
 	"sylr.dev/rafty/discovery"
+	"sylr.dev/rafty/interfaces"
+	"sylr.dev/rafty/logger"
 )
 
 // ServiceDiscoverer is a Rafty discoverer which leverages the use of Consul services.
 // This discoverer will register itself upon calling Start() and deregister itself
 // when terminated.
 type ServiceDiscoverer struct {
-	logger               rafty.Logger
+	logger               interfaces.Logger
 	hclogger             hclog.Logger
 	advertisedAddr       string
 	advertisedPort       int
@@ -37,11 +38,11 @@ type ServiceDiscoverer struct {
 	mux                  sync.Mutex
 }
 
-var _ discovery.Discoverer = (*ServiceDiscoverer)(nil)
+var _ interfaces.Discoverer = (*ServiceDiscoverer)(nil)
 
 type ServiceOption func(*ServiceDiscoverer) error
 
-func Logger(logger rafty.Logger) ServiceOption {
+func Logger(logger interfaces.Logger) ServiceOption {
 	return func(disco *ServiceDiscoverer) error {
 		disco.logger = logger
 		return nil
@@ -91,7 +92,7 @@ func NewServiceDiscoverer(advertisedAddr string, advertisedPort int, consulClien
 	}
 
 	if d.logger == nil {
-		d.logger = &rafty.NullLogger{}
+		d.logger = &logger.NullLogger{}
 	}
 
 	return d, nil

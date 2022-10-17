@@ -8,18 +8,19 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/raft"
+	"sylr.dev/rafty/interfaces"
 )
 
 type RaftConfig struct {
 	ListeningAddress  string
 	ListeningPort     int
 	AdvertisedAddress string
-	Logger            Logger
+	Logger            interfaces.Logger
 	HCLogger          hclog.Logger
 	ServerID          raft.ServerID
 }
 
-func NewRaft[T any, T2 Work[T]](c RaftConfig, ch chan RaftLog[T, T2]) (*raft.Raft, error) {
+func NewRaft[T any, T2 interfaces.Work[T]](c RaftConfig, ch chan RaftLog[T, T2]) (*raft.Raft, error) {
 	listen := fmt.Sprintf("%s:%d", c.ListeningAddress, c.ListeningPort)
 	config := raft.DefaultConfig()
 	config.LocalID = c.ServerID
@@ -78,7 +79,7 @@ func NewRaft[T any, T2 Work[T]](c RaftConfig, ch chan RaftLog[T, T2]) (*raft.Raf
 	return raft.NewRaft(config, f, logStore, stableStore, snapshotStore, transport)
 }
 
-type RaftLog[T any, T2 Work[T]] struct {
+type RaftLog[T any, T2 interfaces.Work[T]] struct {
 	Disco map[raft.ServerID][]T2
 	index uint64
 }

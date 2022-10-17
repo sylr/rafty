@@ -7,23 +7,24 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/buraksezer/consistent"
-	"github.com/cespare/xxhash"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/raft"
 
-	"sylr.dev/rafty/discovery"
+	distribconsistent "sylr.dev/rafty/distributor/consistent"
+	"sylr.dev/rafty/interfaces"
+	"sylr.dev/rafty/logger"
 )
 
 // Rafty
-type Rafty[T any, T2 Work[T]] struct {
-	logger   Logger
+type Rafty[T any, T2 interfaces.Work[T]] struct {
+	logger   interfaces.Logger
 	hcLogger hclog.Logger
 
 	raft           *raft.Raft
 	raftID         raft.ServerID
-	discoverer     discovery.Discoverer
-	foreman        Foreman[T, T2]
+	discoverer     interfaces.Discoverer
+	foreman        interfaces.Foreman[T, T2]
+	distributor    interfaces.Distributor[T, T2]
 	currentServers []raft.Server
 
 	listeningAddress  string
@@ -38,9 +39,9 @@ type Rafty[T any, T2 Work[T]] struct {
 	doneCh    chan struct{}
 }
 
-func New[T any, T2 Work[T]](logger Logger, disco discovery.Discoverer, foreman Foreman[T, T2], start func(context.Context, T2), opts ...Option[T, T2]) (*Rafty[T, T2], error) {
+func New[T any, T2 interfaces.Work[T]](disco interfaces.Discoverer, foreman interfaces.Foreman[T, T2], start func(context.Context, T2), opts ...Option[T, T2]) (*Rafty[T, T2], error) {
 	r := &Rafty[T, T2]{
-		logger:         logger,
+		logger:         &logger.StdLogger{},
 		startFunc:      start,
 		discoverer:     disco,
 		foreman:        foreman,
@@ -59,10 +60,12 @@ func New[T any, T2 Work[T]](logger Logger, disco discovery.Discoverer, foreman F
 		}
 	}
 
-	if logger == nil {
-		return nil, ErrLoggerRequired
+	if r.logger == nil {
+		r.logger = &logger.StdLogger{}
 	}
-
+	if r.distributor == nil {
+		r.distributor = distribconsistent.New[T, T2]()
+	}
 	if len(r.listeningAddress) == 0 {
 		r.listeningAddress = "0.0.0.0"
 	}
@@ -97,16 +100,23 @@ func New[T any, T2 Work[T]](logger Logger, disco discovery.Discoverer, foreman F
 	return r, nil
 }
 
-type Option[T any, T2 Work[T]] func(*Rafty[T, T2]) error
+type Option[T any, T2 interfaces.Work[T]] func(*Rafty[T, T2]) error
 
-func HCLogger[T any, T2 Work[T]](logger hclog.Logger) Option[T, T2] {
+func Logger[T any, T2 interfaces.Work[T]](logger interfaces.Logger) Option[T, T2] {
+	return func(r *Rafty[T, T2]) error {
+		r.logger = logger
+		return nil
+	}
+}
+
+func HCLogger[T any, T2 interfaces.Work[T]](logger hclog.Logger) Option[T, T2] {
 	return func(r *Rafty[T, T2]) error {
 		r.hcLogger = logger
 		return nil
 	}
 }
 
-func RaftListeningAddressPort[T any, T2 Work[T]](address string, port int) Option[T, T2] {
+func RaftListeningAddressPort[T any, T2 interfaces.Work[T]](address string, port int) Option[T, T2] {
 	return func(r *Rafty[T, T2]) error {
 		r.listeningAddress = address
 		r.listeningPort = port
@@ -114,7 +124,7 @@ func RaftListeningAddressPort[T any, T2 Work[T]](address string, port int) Optio
 	}
 }
 
-func RaftAdvertisedAddress[T any, T2 Work[T]](address string) Option[T, T2] {
+func RaftAdvertisedAddress[T any, T2 interfaces.Work[T]](address string) Option[T, T2] {
 	return func(r *Rafty[T, T2]) error {
 		r.advertisedAddress = address
 		return nil
@@ -249,7 +259,7 @@ func (r *Rafty[T, T2]) Start(ctx context.Context) error {
 					}
 				}
 
-				if d, ok := r.discoverer.(discovery.Finalizer); ok {
+				if d, ok := r.discoverer.(interfaces.Finalizer); ok {
 					select {
 					case <-d.Done():
 					case <-time.After(5 * time.Second):
@@ -278,7 +288,7 @@ func (r *Rafty[T, T2]) Done() chan struct{} {
 }
 
 func (r *Rafty[T, T2]) leader(newWork []T2) {
-	distributed := r.distributeWork(newWork)
+	distributed := r.distributor.Distribute(r.currentServers, newWork)
 	r.logger.Infof("Distributed work: %v", distributed)
 
 	js, err := json.Marshal(distributed)
@@ -365,46 +375,6 @@ func (r *Rafty[T, T2]) updateServers(servers []raft.Server) {
 	r.currentServers = servers
 }
 
-func (r *Rafty[T, T2]) distributeWork(works []T2) map[raft.ServerID][]T2 {
-	members := make([]consistent.Member, 0, len(r.currentServers))
-	fut := r.raft.GetConfiguration()
-
-	if err := fut.Error(); err != nil {
-		r.logger.Errorf("Error while getting raft configuration: %s", err)
-		return nil
-	}
-
-	for _, server := range fut.Configuration().Servers {
-		members = append(members, stringer(server.ID))
-	}
-
-	r.logger.Infof("Distributing work: %v", works)
-	r.logger.Infof("Distributing servers: %v", members)
-
-	c := consistent.New(members, consistent.Config{
-		Hasher:            hasher{},
-		PartitionCount:    271,
-		ReplicationFactor: 20,
-		Load:              1.25,
-	})
-
-	output := make(map[raft.ServerID][]T2, 0)
-
-	for _, w := range works {
-		b, _ := json.Marshal(w)
-		i := c.FindPartitionID(b)
-		owner := c.GetPartitionOwner(i).String()
-
-		if _, ok := output[raft.ServerID(owner)]; !ok {
-			output[raft.ServerID(owner)] = make([]T2, 0)
-		}
-
-		output[raft.ServerID(owner)] = append(output[raft.ServerID(owner)], w)
-	}
-
-	return output
-}
-
 func (r *Rafty[T, T2]) manageWork(newWork RaftLog[T, T2]) {
 	removed, added := r.currentWork.Diff(r.raftID, newWork)
 
@@ -436,19 +406,7 @@ func (r *Rafty[T, T2]) cancelAllWork() {
 	r.currentWork.Disco[r.raftID] = make([]T2, 0)
 }
 
-func (r *Rafty[T, T2]) cancelWork(w Work[T]) {
+func (r *Rafty[T, T2]) cancelWork(w interfaces.Work[T]) {
 	r.workCancel[w.ID()]()
 	delete(r.workCancel, w.ID())
-}
-
-type stringer string
-
-func (s stringer) String() string {
-	return string(s)
-}
-
-type hasher struct{}
-
-func (h hasher) Sum64(data []byte) uint64 {
-	return xxhash.Sum64(data)
 }

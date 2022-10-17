@@ -10,15 +10,16 @@ import (
 	"github.com/hashicorp/raft"
 	"github.com/nats-io/nats.go"
 
-	"sylr.dev/rafty"
 	"sylr.dev/rafty/discovery"
+	"sylr.dev/rafty/interfaces"
+	"sylr.dev/rafty/logger"
 )
 
 // KVDiscoverer is a Rafty discoverer which leverages the use of NATS JetStream
 // key values. This discoverer will register itself upon calling Start() and
 // deregister itself when terminated.
 type KVDiscoverer struct {
-	logger         rafty.Logger
+	logger         interfaces.Logger
 	advertisedAddr string
 	natsConn       *nats.Conn
 	jsContext      nats.JetStreamContext
@@ -31,7 +32,7 @@ type KVDiscoverer struct {
 	mux            sync.Mutex
 }
 
-var _ discovery.Discoverer = (*KVDiscoverer)(nil)
+var _ interfaces.Discoverer = (*KVDiscoverer)(nil)
 
 type KVOption func(*KVDiscoverer) error
 
@@ -49,7 +50,7 @@ func JSBucket(bucket string) KVOption {
 	}
 }
 
-func Logger(logger rafty.Logger) KVOption {
+func Logger(logger interfaces.Logger) KVOption {
 	return func(disco *KVDiscoverer) error {
 		disco.logger = logger
 		return nil
@@ -82,7 +83,7 @@ func NewKVDiscoverer(advertisedAddr string, natsConn *nats.Conn, options ...KVOp
 	}
 
 	if d.logger == nil {
-		d.logger = &rafty.NullLogger{}
+		d.logger = &logger.NullLogger{}
 	}
 
 	if d.jsContext == nil {

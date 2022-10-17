@@ -7,7 +7,7 @@ import (
 
 	"github.com/hashicorp/raft"
 
-	"sylr.dev/rafty/discovery"
+	"sylr.dev/rafty/interfaces"
 )
 
 type LocalDiscoverer struct {
@@ -18,7 +18,7 @@ type LocalDiscoverer struct {
 	interval       time.Duration
 }
 
-var _ discovery.Discoverer = (*LocalDiscoverer)(nil)
+var _ interfaces.Discoverer = (*LocalDiscoverer)(nil)
 
 func (ld *LocalDiscoverer) Start(ctx context.Context) {
 	for {

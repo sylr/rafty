@@ -1,19 +1,13 @@
-package rafty
+package logger
 
 import (
 	"fmt"
 	"os"
 
 	"github.com/hashicorp/go-hclog"
-)
 
-type Logger interface {
-	Tracef(format string, fields ...interface{})
-	Debugf(format string, fields ...interface{})
-	Infof(format string, fields ...interface{})
-	Warnf(format string, fields ...interface{})
-	Errorf(format string, fields ...interface{})
-}
+	"sylr.dev/rafty/interfaces"
+)
 
 type HCLoggerWriter struct {
 	hclog.Logger
@@ -24,7 +18,7 @@ func (l *HCLoggerWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-var _ Logger = (*NullLogger)(nil)
+var _ interfaces.Logger = (*NullLogger)(nil)
 
 // NullLogger is a logger which logs nothing
 type NullLogger struct{}
@@ -49,7 +43,7 @@ func (l *NullLogger) Errorf(format string, args ...interface{}) {
 
 }
 
-var _ Logger = (*StdLogger)(nil)
+var _ interfaces.Logger = (*StdLogger)(nil)
 
 // StdLogger is a logger which logs on standard outputs
 type StdLogger struct{}

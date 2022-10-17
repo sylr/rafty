@@ -1,4 +1,4 @@
-package rafty
+package interfaces
 
 // Formeman is the mechanism Rafty uses to retrieve work.
 type Foreman[T any, T2 Work[T]] interface {

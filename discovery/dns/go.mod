@@ -10,8 +10,6 @@ require (
 
 require (
 	github.com/armon/go-metrics v0.4.1 // indirect
-	github.com/buraksezer/consistent v0.9.0 // indirect
-	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/hashicorp/go-hclog v1.3.1 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect

@@ -1,4 +1,4 @@
-package discovery
+package interfaces
 
 import "github.com/hashicorp/raft"
 

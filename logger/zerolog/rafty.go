@@ -3,12 +3,12 @@ package raftyzerolog
 import (
 	"github.com/rs/zerolog"
 
-	"sylr.dev/rafty"
+	"sylr.dev/rafty/interfaces"
 )
 
-var _ rafty.Logger = (*RaftyLogger)(nil)
+var _ interfaces.Logger = (*RaftyLogger)(nil)
 
-// RaftyLogger is a wrapper around zerolog.Logger that implements rafty.Logger.
+// RaftyLogger is a wrapper around zerolog.Logger that implements logger.Logger.
 type RaftyLogger struct {
 	zerolog.Logger
 }

@@ -18,9 +18,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"sylr.dev/rafty"
-	"sylr.dev/rafty/discovery"
 	discoconsul "sylr.dev/rafty/discovery/consul"
 	disconats "sylr.dev/rafty/discovery/nats"
+	"sylr.dev/rafty/interfaces"
 	raftyzerolog "sylr.dev/rafty/logger/zerolog"
 )
 
@@ -98,7 +98,7 @@ func run(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(ctx)
 
 	var err error
-	var discoverer discovery.Discoverer
+	var discoverer interfaces.Discoverer
 	if optionNats {
 		logger.Info().Msg("Using NATS KV discovery")
 		if discoverer, err = makeNatsKVDiscoverer(ctx, &raftylogger); err != nil {
@@ -125,12 +125,12 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	r, err := rafty.New[string, RaftyMcRaftFaceWork[string]](
-		&raftylogger,
 		discoverer,
 		works,
 		makeWork(&logger),
 		rafty.RaftListeningAddressPort[string, RaftyMcRaftFaceWork[string]](optionBindAddress, optionPort),
 		rafty.RaftAdvertisedAddress[string, RaftyMcRaftFaceWork[string]](optionAdvertisedAddress),
+		rafty.Logger[string, RaftyMcRaftFaceWork[string]](&raftylogger),
 		rafty.HCLogger[string, RaftyMcRaftFaceWork[string]](&hclogger),
 	)
 	if err != nil {
@@ -156,7 +156,7 @@ func run(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func makeNatsKVDiscoverer(ctx context.Context, logger rafty.Logger) (discovery.Discoverer, error) {
+func makeNatsKVDiscoverer(ctx context.Context, logger interfaces.Logger) (interfaces.Discoverer, error) {
 	var err error
 	var natsConn *nats.Conn
 
@@ -191,7 +191,7 @@ func makeNatsKVDiscoverer(ctx context.Context, logger rafty.Logger) (discovery.D
 	return natsKVDiscoverer, nil
 }
 
-func makeConsulServiceDiscoverer(ctx context.Context, logger rafty.Logger, hclogger hclog.Logger) (discovery.Discoverer, error) {
+func makeConsulServiceDiscoverer(ctx context.Context, logger interfaces.Logger, hclogger hclog.Logger) (interfaces.Discoverer, error) {
 	config := consul.DefaultConfigWithLogger(hclogger)
 	client, err := consul.NewClient(config)
 	if err != nil {
@@ -220,7 +220,7 @@ func makeConsulServiceDiscoverer(ctx context.Context, logger rafty.Logger, hclog
 	return consulDiscoverer, nil
 }
 
-func makeLocalDiscoverer(ctx context.Context, _ rafty.Logger) (discovery.Discoverer, error) {
+func makeLocalDiscoverer(ctx context.Context, _ interfaces.Logger) (interfaces.Discoverer, error) {
 	localDiscoverer := &LocalDiscoverer{
 		advertisedAddr: optionAdvertisedAddress,
 		startPort:      10000,

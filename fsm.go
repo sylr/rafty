@@ -7,13 +7,14 @@ import (
 	"sync"
 
 	"github.com/hashicorp/raft"
+	"sylr.dev/rafty/interfaces"
 )
 
-var _ raft.FSM = (*fsm[string, Work[string]])(nil)
-var _ raft.FSMSnapshot = (*snapshot[string, Work[string]])(nil)
+var _ raft.FSM = (*fsm[string, interfaces.Work[string]])(nil)
+var _ raft.FSMSnapshot = (*snapshot[string, interfaces.Work[string]])(nil)
 
-type fsm[T any, T2 Work[T]] struct {
-	logger Logger
+type fsm[T any, T2 interfaces.Work[T]] struct {
+	logger interfaces.Logger
 	mux    sync.Mutex
 	ch     chan RaftLog[T, T2]
 	w      RaftLog[T, T2]
@@ -48,7 +49,7 @@ func (f *fsm[T, T2]) Restore(io.ReadCloser) error {
 	return nil
 }
 
-type snapshot[T any, T2 Work[T]] struct {
+type snapshot[T any, T2 interfaces.Work[T]] struct {
 	w RaftLog[T, T2]
 }
 

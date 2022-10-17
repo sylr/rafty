@@ -1,4 +1,4 @@
-package rafty
+package interfaces
 
 type Work[T any] interface {
 	ID() string
