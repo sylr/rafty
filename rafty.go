@@ -134,11 +134,21 @@ func RaftAdvertisedAddress[T any, T2 interfaces.Work[T]](address string) Option[
 func (r *Rafty[T, T2]) Start(ctx context.Context) error {
 	configuration := raft.Configuration{}
 
+NEWSERVERS:
 	r.logger.Tracef("Waiting for disco to send first servers list")
-	<-r.discoverer.NewServers()
+	select {
+	case <-r.discoverer.NewServers():
+	case <-ctx.Done():
+		return fmt.Errorf("context canceled while waiting for first servers list")
+	}
 
 	servers := r.discoverer.GetServers()
 	r.logger.Tracef("Received first servers list: %v", servers)
+
+	if len(servers) == 0 {
+		r.logger.Warnf("Received an empty first servers list, retrying ...")
+		goto NEWSERVERS
+	}
 
 	isVoter := false
 	for _, server := range servers {
