@@ -154,9 +154,14 @@ func (d *SRVDiscoverer) getServers() []raft.Server {
 	servers := make([]raft.Server, 0, len(r.Answer))
 	for i, a := range r.Answer {
 		if srv, ok := a.(*dns.SRV); ok {
-			suffrage := raft.Nonvoter
-			if i < d.maxVoters {
-				suffrage = raft.Voter
+			suffrage := raft.Voter
+			if i > 8 {
+				suffrage = raft.Nonvoter
+			} else {
+				// Make the number of voters odd if cluster size greater than 3
+				if len(r.Answer) > 3 && i == len(r.Answer)-1 && i%2 == 1 {
+					suffrage = raft.Nonvoter
+				}
 			}
 
 			addrPort := fmt.Sprintf("%s:%d", srv.Target, srv.Port)
