@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -23,6 +22,10 @@ import (
 	disconats "sylr.dev/rafty/discovery/nats"
 	"sylr.dev/rafty/interfaces"
 	raftyzerolog "sylr.dev/rafty/logger/zerolog"
+)
+
+var (
+	Version = "dev"
 )
 
 var (
@@ -74,11 +77,7 @@ func main() {
 func run(cmd *cobra.Command, args []string) error {
 	logger, raftylogger, raftlogger, consullogger := loggers()
 
-	if buildInfo, ok := debug.ReadBuildInfo(); ok {
-		logger.Info().Msgf("Starting RaftyMcRaftFace version=%s go=%s", buildInfo.Main.Version, runtime.Version())
-	} else {
-		logger.Info().Msg("Starting RaftyMcRaftFace")
-	}
+	logger.Info().Msgf("Starting RaftyMcRaftFace version=%s go=%s", Version, runtime.Version())
 
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
