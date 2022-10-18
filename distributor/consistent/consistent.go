@@ -41,6 +41,13 @@ func Load[T any, T2 interfaces.Work[T]](load float64) Option[T, T2] {
 	}
 }
 
+func Hasher[T any, T2 interfaces.Work[T]](hasher consistent.Hasher) Option[T, T2] {
+	return func(d *distributor[T, T2]) error {
+		d.config.Hasher = hasher
+		return nil
+	}
+}
+
 func New[T any, T2 interfaces.Work[T]](options ...Option[T, T2]) (*distributor[T, T2], error) {
 	d := &distributor[T, T2]{
 		config: consistent.Config{
