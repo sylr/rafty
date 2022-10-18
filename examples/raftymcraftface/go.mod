@@ -10,10 +10,11 @@ require (
 	github.com/nats-io/nats.go v1.18.0
 	github.com/rs/zerolog v1.28.0
 	github.com/spf13/cobra v1.6.0
-	sylr.dev/rafty v0.0.0-20221018135550-627952822d8b
-	sylr.dev/rafty/discovery/consul v0.0.0-20221018135550-627952822d8b
-	sylr.dev/rafty/discovery/nats v0.0.0-20221018135550-627952822d8b
-	sylr.dev/rafty/logger/zerolog v0.0.0-20221018135550-627952822d8b
+	sylr.dev/rafty v0.0.0-20221018143208-80e1970e9423
+	sylr.dev/rafty/discovery/consul v0.0.0-20221018143208-80e1970e9423
+	sylr.dev/rafty/discovery/dns v0.0.0-20221018135550-627952822d8b
+	sylr.dev/rafty/discovery/nats v0.0.0-20221018143208-80e1970e9423
+	sylr.dev/rafty/logger/zerolog v0.0.0-20221018143208-80e1970e9423
 )
 
 require (
@@ -30,12 +31,16 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.16 // indirect
+	github.com/miekg/dns v1.1.50 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/nats-io/nkeys v0.3.0 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	golang.org/x/crypto v0.0.0-20221012134737-56aed061732a // indirect
+	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
+	golang.org/x/net v0.0.0-20221017152216-f25eb7ecb193 // indirect
 	golang.org/x/sys v0.1.0 // indirect
-	sylr.dev/rafty/distributor/consistent v0.0.0-20221018135550-627952822d8b // indirect
+	golang.org/x/tools v0.1.12 // indirect
+	sylr.dev/rafty/distributor/consistent v0.0.0-20221018143208-80e1970e9423 // indirect
 )
