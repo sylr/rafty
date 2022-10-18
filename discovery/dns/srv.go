@@ -76,7 +76,11 @@ func NewSRVDiscoverer(srvRecord string, options ...SRVOption) (*SRVDiscoverer, e
 	}
 
 	if d.client == nil {
-		d.client = &dns.Client{}
+		d.client = &dns.Client{
+			Timeout:     3 * time.Second,
+			DialTimeout: 3 * time.Second,
+			ReadTimeout: 3 * time.Second,
+		}
 	}
 
 	if d.logger == nil {
@@ -88,7 +92,7 @@ func NewSRVDiscoverer(srvRecord string, options ...SRVOption) (*SRVDiscoverer, e
 		if err != nil {
 			return nil, err
 		}
-		d.nameserver = config.Servers[0]
+		d.nameserver = fmt.Sprintf("%s:%d", config.Servers[0], 53)
 	}
 
 	if len(d.record) == 0 {
@@ -147,7 +151,7 @@ func (d *SRVDiscoverer) getServers() []raft.Server {
 
 	r, _, err := d.client.Exchange(&msg, d.nameserver)
 	if err != nil {
-		d.logger.Errorf("dns-disco: fail to query nameserver: %w", err)
+		d.logger.Errorf("dns-disco: fail to query nameserver: %s", err.Error())
 		return nil
 	}
 
