@@ -10,11 +10,11 @@ require (
 	github.com/nats-io/nats.go v1.18.0
 	github.com/rs/zerolog v1.28.0
 	github.com/spf13/cobra v1.6.0
-	sylr.dev/rafty v0.0.0-20221018144537-c34a7c71ed8b
-	sylr.dev/rafty/discovery/consul v0.0.0-20221018144537-c34a7c71ed8b
-	sylr.dev/rafty/discovery/dns v0.0.0-20221018144537-c34a7c71ed8b
-	sylr.dev/rafty/discovery/nats v0.0.0-20221018144537-c34a7c71ed8b
-	sylr.dev/rafty/logger/zerolog v0.0.0-20221018144537-c34a7c71ed8b
+	sylr.dev/rafty v0.0.0-20221018153843-4f06136fc7d3
+	sylr.dev/rafty/discovery/consul v0.0.0-20221018153843-4f06136fc7d3
+	sylr.dev/rafty/discovery/dns v0.0.0-20221018153843-4f06136fc7d3
+	sylr.dev/rafty/discovery/nats v0.0.0-20221018153843-4f06136fc7d3
+	sylr.dev/rafty/logger/zerolog v0.0.0-20221018153843-4f06136fc7d3
 )
 
 require (
@@ -42,5 +42,5 @@ require (
 	golang.org/x/net v0.0.0-20221017152216-f25eb7ecb193 // indirect
 	golang.org/x/sys v0.1.0 // indirect
 	golang.org/x/tools v0.1.12 // indirect
-	sylr.dev/rafty/distributor/consistent v0.0.0-20221018144537-c34a7c71ed8b // indirect
+	sylr.dev/rafty/distributor/consistent v0.0.0-20221018153843-4f06136fc7d3 // indirect
 )

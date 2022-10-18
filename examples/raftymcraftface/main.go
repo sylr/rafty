@@ -96,7 +96,7 @@ func run(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	} else if len(optionDNSSRV) > 0 {
-		logger.Info().Msg("Using DNS SRV  discovery")
+		logger.Info().Msg("Using DNS SRV discovery")
 		if discoverer, err = makeDNSSRVDiscoverer(ctx, raftylogger); err != nil {
 			return err
 		}
