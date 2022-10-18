@@ -145,30 +145,53 @@ func (d *SRVDiscoverer) GetServers() []raft.Server {
 }
 
 func (d *SRVDiscoverer) getServers() []raft.Server {
-	msg := dns.Msg{}
-	msg.SetQuestion(d.record, dns.TypeSRV)
-	msg.SetEdns0(4096, true)
+	msgSrv := dns.Msg{}
+	msgSrv.SetQuestion(d.record, dns.TypeSRV)
+	msgSrv.SetEdns0(4096, true)
 
-	r, _, err := d.client.Exchange(&msg, d.nameserver)
+	respSrv, _, err := d.client.Exchange(&msgSrv, d.nameserver)
 	if err != nil {
 		d.logger.Errorf("disco-dns-srv: fail to query nameserver: %s", err.Error())
 		return nil
 	}
 
-	servers := make([]raft.Server, 0, len(r.Answer))
-	for i, a := range r.Answer {
-		if srv, ok := a.(*dns.SRV); ok {
+	servers := make([]raft.Server, 0, len(respSrv.Answer))
+	for i, ansSrv := range respSrv.Answer {
+		if srv, ok := ansSrv.(*dns.SRV); ok {
+			msgA := dns.Msg{}
+			msgA.SetQuestion(srv.Target, dns.TypeA)
+			msgA.SetEdns0(4096, true)
+
+			respA, _, err := d.client.Exchange(&msgA, d.nameserver)
+			if err != nil {
+				d.logger.Errorf("disco-dns-srv: fail to query nameserver: %s", err.Error())
+				return nil
+			}
+
+			if len(respA.Answer) == 0 {
+				d.logger.Warnf("disco-dns-srv: empty A answer for: %s", srv.Target)
+				continue
+			}
+
+			ansA := respA.Answer[0]
+
+			a, ok := ansA.(*dns.A)
+			if !ok {
+				d.logger.Warnf("disco-dns-srv: cannot cast A answer for: %s", srv.Target)
+				continue
+			}
+
 			suffrage := raft.Voter
-			if i > 8 {
+			if l := len(servers); l > 8 {
 				suffrage = raft.Nonvoter
 			} else {
 				// Make the number of voters odd if cluster size greater than 3
-				if len(r.Answer) > 3 && i == len(r.Answer)-1 && i%2 == 1 {
+				if l > 3 && i == l-1 && i%2 == 1 {
 					suffrage = raft.Nonvoter
 				}
 			}
 
-			addrPort := fmt.Sprintf("%s:%d", srv.Target, srv.Port)
+			addrPort := fmt.Sprintf("%s:%d", a.A.String(), srv.Port)
 			servers = append(servers, raft.Server{
 				ID:       raft.ServerID(addrPort),
 				Address:  raft.ServerAddress(addrPort),
