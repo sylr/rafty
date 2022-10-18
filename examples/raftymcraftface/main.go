@@ -19,6 +19,7 @@ import (
 
 	"sylr.dev/rafty"
 	discoconsul "sylr.dev/rafty/discovery/consul"
+	discodns "sylr.dev/rafty/discovery/dns"
 	disconats "sylr.dev/rafty/discovery/nats"
 	"sylr.dev/rafty/interfaces"
 	raftyzerolog "sylr.dev/rafty/logger/zerolog"
@@ -30,6 +31,7 @@ var (
 	optionPort              int
 	optionClusterSize       int
 	optionConsul            bool
+	optionDNSSRV            string
 	optionNats              bool
 	optionNatsContext       string
 	optionNatsURL           string
@@ -51,6 +53,7 @@ func init() {
 	raftyMcRaftFace.PersistentFlags().IntVar(&optionPort, "port", 10000, "Raft Port to bind to")
 	raftyMcRaftFace.PersistentFlags().IntVar(&optionClusterSize, "cluster-size", 10, "Raft cluster size")
 	raftyMcRaftFace.PersistentFlags().BoolVar(&optionConsul, "consul", false, "Use Consul disco")
+	raftyMcRaftFace.PersistentFlags().StringVar(&optionDNSSRV, "dns-srv", "", "Use DNS SRV disco")
 	raftyMcRaftFace.PersistentFlags().BoolVar(&optionNats, "nats", false, "Use Nats disco")
 	raftyMcRaftFace.PersistentFlags().StringVar(&optionNatsContext, "nats-context", "", "Choose a Nats context")
 	raftyMcRaftFace.PersistentFlags().StringVar(&optionNatsURL, "nats-url", "", "Nats URL")
@@ -91,6 +94,11 @@ func run(cmd *cobra.Command, args []string) error {
 	} else if optionConsul {
 		logger.Info().Msg("Using Consul service discovery")
 		if discoverer, err = makeConsulServiceDiscoverer(ctx, raftylogger, consullogger); err != nil {
+			return err
+		}
+	} else if len(optionDNSSRV) > 0 {
+		logger.Info().Msg("Using DNS SRV  discovery")
+		if discoverer, err = makeDNSSRVDiscoverer(ctx, raftylogger); err != nil {
 			return err
 		}
 	} else {
@@ -243,6 +251,17 @@ func makeConsulServiceDiscoverer(ctx context.Context, logger interfaces.Logger, 
 	}
 
 	return consulDiscoverer, nil
+}
+
+func makeDNSSRVDiscoverer(ctx context.Context, logger interfaces.Logger) (interfaces.Discoverer, error) {
+	dnsDiscoverer, err := discodns.NewSRVDiscoverer(optionDNSSRV, discodns.Logger(logger))
+	if err != nil {
+		return nil, err
+	}
+
+	dnsDiscoverer.Start(ctx)
+
+	return dnsDiscoverer, nil
 }
 
 func makeLocalDiscoverer(ctx context.Context, _ interfaces.Logger) (interfaces.Discoverer, error) {
