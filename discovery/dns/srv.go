@@ -151,7 +151,7 @@ func (d *SRVDiscoverer) getServers() []raft.Server {
 
 	r, _, err := d.client.Exchange(&msg, d.nameserver)
 	if err != nil {
-		d.logger.Errorf("dns-disco: fail to query nameserver: %s", err.Error())
+		d.logger.Errorf("disco-dns-srv: fail to query nameserver: %s", err.Error())
 		return nil
 	}
 
