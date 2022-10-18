@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/hashicorp/raft v1.3.11
 	github.com/miekg/dns v1.1.50
-	sylr.dev/rafty v0.0.0-20221018134100-00c4aef084ea
+	sylr.dev/rafty v0.0.0-20221018135550-627952822d8b
 )
 
 require (
