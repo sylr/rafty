@@ -1,8 +1,0 @@
-GO_VERSION=go version go1.19.2 darwin/arm64
-GO_GOOS=darwin
-GO_GOARCH=arm64
-GO_GOARM=
-GO_BUILD_TAGS=
-GO_BUILD_FLAGS=-trimpath
-GO_BUILD_LDFLAGS=-ldflags '-s -w -X sylr.dev/rafty/examples/raftymcraftface/main.Version=6279528-dirty -extldflags ""'
-CGO_ENABLED=0
