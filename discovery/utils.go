@@ -1,3 +1,4 @@
+// Package discovery contains utility functions for discovery.
 package discovery
 
 import "github.com/hashicorp/raft"

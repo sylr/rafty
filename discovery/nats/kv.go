@@ -1,3 +1,4 @@
+// Package disconats contains Rafty Discoverers which leverage the use NATS.
 package disconats
 
 import (

@@ -1,3 +1,6 @@
+// Package distribconsistent implements a Rafty Distributor which uses the
+// github.com/buraksezer/consistent library to distribute work amongst the Rafty
+// members.
 package distribconsistent
 
 import (
@@ -12,6 +15,8 @@ import (
 type distributor[T any, T2 interfaces.Work[T]] struct {
 	config consistent.Config
 }
+
+var _ interfaces.Distributor[string, interfaces.Work[string]] = (*distributor[string, interfaces.Work[string]])(nil)
 
 type Option[T any, T2 interfaces.Work[T]] func(*distributor[T, T2]) error
 

@@ -1,3 +1,5 @@
+// Package discoconsul contains Rafty Discoverers which leverage the use of
+// HashiCorp's Consul.
 package discoconsul
 
 import (
@@ -19,7 +21,7 @@ import (
 
 // ServiceDiscoverer is a Rafty discoverer which leverages the use of Consul services.
 // This discoverer will register itself upon calling Start() and deregister itself
-// when terminated.
+// when context given to Start() is canceled.
 type ServiceDiscoverer struct {
 	logger               interfaces.Logger
 	hclogger             hclog.Logger

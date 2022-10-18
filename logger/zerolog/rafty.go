@@ -6,12 +6,12 @@ import (
 	"sylr.dev/rafty/interfaces"
 )
 
-var _ interfaces.Logger = (*RaftyLogger)(nil)
-
 // RaftyLogger is a wrapper around zerolog.Logger that implements logger.Logger.
 type RaftyLogger struct {
 	zerolog.Logger
 }
+
+var _ interfaces.Logger = (*RaftyLogger)(nil)
 
 func (l *RaftyLogger) Tracef(format string, args ...interface{}) {
 	l.Trace().Msgf(format, args...)

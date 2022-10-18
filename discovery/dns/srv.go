@@ -1,3 +1,4 @@
+// Package discodns contains Rafty Discoverers which leverage the use of DNS.
 package discodns
 
 import (
@@ -15,8 +16,6 @@ import (
 	"sylr.dev/rafty/logger"
 )
 
-var _ interfaces.Discoverer = (*SRVDiscoverer)(nil)
-
 // SRVDiscoverer is a Rafty discoverer which leverages the use of DNS and SRV records.
 type SRVDiscoverer struct {
 	logger         interfaces.Logger
@@ -29,6 +28,8 @@ type SRVDiscoverer struct {
 	currentServers []raft.Server
 	mux            sync.Mutex
 }
+
+var _ interfaces.Discoverer = (*SRVDiscoverer)(nil)
 
 type SRVOption func(*SRVDiscoverer) error
 

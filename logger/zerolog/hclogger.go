@@ -8,12 +8,12 @@ import (
 	"github.com/rs/zerolog"
 )
 
-var _ hclog.Logger = (*HCLogger)(nil)
-
 // Logger is a wrapper around zerolog.Logger that implements hclog.Logger.
 type HCLogger struct {
 	zerolog.Logger
 }
+
+var _ hclog.Logger = (*HCLogger)(nil)
 
 func (l *HCLogger) IsTrace() bool {
 	return l.Logger.GetLevel() == zerolog.TraceLevel
