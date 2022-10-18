@@ -1,4 +1,4 @@
-module sylr.dev/rafty/logger/raftyzerolog
+module sylr.dev/rafty/logger/zerolog
 
 go 1.19
 
