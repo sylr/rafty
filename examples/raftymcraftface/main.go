@@ -139,7 +139,9 @@ func run(cmd *cobra.Command, args []string) error {
 	logger.Debug().Msg("Waiting for signal")
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGINT, syscall.SIGTERM)
-	<-interrupt
+	s := <-interrupt
+
+	logger.Info().Msgf("Received signal: %v", s)
 
 	cancel()
 	<-r.Done()
