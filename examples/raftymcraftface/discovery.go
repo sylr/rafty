@@ -43,7 +43,7 @@ func (ld *LocalDiscoverer) GetServers() []raft.Server {
 		address := raft.ServerAddress(fmt.Sprintf("%s:%d", ld.advertisedAddr, ld.startPort+i))
 
 		suffrage := raft.Voter
-		if i > 9 {
+		if i > 8 {
 			suffrage = raft.Nonvoter
 		} else {
 			// Make the number of voters odd if cluster size greater than 3
