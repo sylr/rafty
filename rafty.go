@@ -150,13 +150,21 @@ NEWSERVERS:
 		goto NEWSERVERS
 	}
 
+	found := false
 	isVoter := false
 	for _, server := range servers {
 		if server.ID == r.raftID {
+			found = true
 			if server.Suffrage == raft.Voter {
 				isVoter = true
 			}
+			break
 		}
+	}
+
+	if !found {
+		r.logger.Warnf("Did not find myself in first servers list, retrying ...")
+		goto NEWSERVERS
 	}
 
 	if isVoter {
