@@ -41,7 +41,7 @@ func Load[T any, T2 interfaces.Work[T]](load float64) Option[T, T2] {
 	}
 }
 
-func New[T any, T2 interfaces.Work[T]](options ...Option[T, T2]) *distributor[T, T2] {
+func New[T any, T2 interfaces.Work[T]](options ...Option[T, T2]) (*distributor[T, T2], error) {
 	d := &distributor[T, T2]{
 		config: consistent.Config{
 			Hasher:            hasher{},
@@ -52,10 +52,12 @@ func New[T any, T2 interfaces.Work[T]](options ...Option[T, T2]) *distributor[T,
 	}
 
 	for _, option := range options {
-		option(d)
+		if err := option(d); err != nil {
+			return nil, err
+		}
 	}
 
-	return d
+	return d, nil
 }
 
 func (d *distributor[T, T2]) Distribute(servers []raft.Server, works []T2) map[raft.ServerID][]T2 {

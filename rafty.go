@@ -64,7 +64,7 @@ func New[T any, T2 interfaces.Work[T]](disco interfaces.Discoverer, foreman inte
 		r.logger = &logger.StdLogger{}
 	}
 	if r.distributor == nil {
-		r.distributor = distribconsistent.New[T, T2]()
+		r.distributor, _ = distribconsistent.New[T, T2]()
 	}
 	if len(r.listeningAddress) == 0 {
 		r.listeningAddress = "0.0.0.0"
