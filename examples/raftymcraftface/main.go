@@ -165,7 +165,7 @@ func makeNatsKVDiscoverer(ctx context.Context, logger interfaces.Logger) (interf
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to nats: %w", err)
 		}
-	} else if ctx, err := natscontext.New(optionNatsContext, true); err != nil {
+	} else if ctx, err := natscontext.New(optionNatsContext, true); err == nil {
 		natsConn, err = ctx.Connect(nats.Name("raftymcraftface"))
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to nats: %w", err)
