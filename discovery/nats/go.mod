@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/hashicorp/raft v1.3.11
 	github.com/nats-io/nats.go v1.18.0
-	sylr.dev/rafty v0.0.0
+	sylr.dev/rafty v0.0.0-20221018134100-00c4aef084ea
 )
 
 require (
@@ -24,9 +24,4 @@ require (
 	golang.org/x/crypto v0.0.0-20221012134737-56aed061732a // indirect
 	golang.org/x/sys v0.0.0-20221013171732-95e765b1cc43 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
-)
-
-replace (
-	sylr.dev/rafty => ../..
-	sylr.dev/rafty/logger/zerolog => ../../logger/zerolog
 )

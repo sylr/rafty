@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/hashicorp/raft"
+
 	"sylr.dev/rafty/interfaces"
 )
 

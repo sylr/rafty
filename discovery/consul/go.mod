@@ -6,7 +6,7 @@ require (
 	github.com/hashicorp/consul/api v1.15.2
 	github.com/hashicorp/go-hclog v1.3.1
 	github.com/hashicorp/raft v1.3.11
-	sylr.dev/rafty v0.0.0
+	sylr.dev/rafty v0.0.0-20221018134100-00c4aef084ea
 )
 
 require (
@@ -23,9 +23,4 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	golang.org/x/sys v0.0.0-20221013171732-95e765b1cc43 // indirect
-)
-
-replace (
-	sylr.dev/rafty => ../..
-	sylr.dev/rafty/logger/zerolog => ../../logger/zerolog
 )

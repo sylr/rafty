@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/hashicorp/raft v1.3.11
 	github.com/miekg/dns v1.1.50
-	sylr.dev/rafty v0.0.0
+	sylr.dev/rafty v0.0.0-20221018134100-00c4aef084ea
 )
 
 require (
@@ -22,5 +22,3 @@ require (
 	golang.org/x/sys v0.0.0-20221013171732-95e765b1cc43 // indirect
 	golang.org/x/tools v0.1.12 // indirect
 )
-
-replace sylr.dev/rafty => ../..
