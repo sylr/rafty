@@ -131,7 +131,7 @@ func RaftAdvertisedAddress[T any, T2 interfaces.Work[T]](address string) Option[
 	}
 }
 
-func (r *Rafty[T, T2]) Start(ctx context.Context) error {
+func (r *Rafty[T, T2]) Start(ctx context.Context) (context.Context, error) {
 	configuration := raft.Configuration{}
 
 NEWSERVERS:
@@ -139,7 +139,7 @@ NEWSERVERS:
 	select {
 	case <-r.discoverer.NewServers():
 	case <-ctx.Done():
-		return fmt.Errorf("context canceled while waiting for first servers list")
+		return nil, fmt.Errorf("context canceled while waiting for first servers list")
 	}
 
 	servers := r.discoverer.GetServers()
@@ -175,7 +175,7 @@ NEWSERVERS:
 		if err := fut.Error(); err != nil {
 			r.logger.Tracef("Bootstrapping cluster failed: %v", err)
 			if !errors.Is(err, raft.ErrCantBootstrap) {
-				return fut.Error()
+				return nil, fut.Error()
 			}
 		} else {
 			_, leaderID := r.raft.LeaderWithID()
@@ -189,9 +189,25 @@ NEWSERVERS:
 	observer := raft.NewObserver(raftObservation, false, nil)
 	r.raft.RegisterObserver(observer)
 
+	limboctx, limbocancel := context.WithCancel(context.Background())
+
 	go func(ctx context.Context) {
+		var candidate bool
+		var candidateSince time.Time
 		for {
 			select {
+			case <-time.After(5 * time.Second):
+				if r.raft.State() == raft.Candidate {
+					if !candidate {
+						candidateSince = time.Now()
+					} else if time.Since(candidateSince) > 10*time.Second {
+						limbocancel()
+					}
+					candidate = true
+				} else {
+					candidate = false
+				}
+
 			case newWork := <-r.ch:
 				if newWork.index < r.raft.LastIndex() {
 					r.logger.Debugf("Ignoring new outdated log index: %d", newWork.index)
@@ -201,8 +217,15 @@ NEWSERVERS:
 				r.logger.Tracef("%v", newWork)
 				r.manageWork(newWork)
 
+			case <-limboctx.Done():
+				r.logger.Warnf("We are in a Raft Limbo")
+				r.logger.Tracef("Quitting Rafty worker loop")
+				r.cancelAllWork()
+				return
+
 			case <-ctx.Done():
 				r.logger.Tracef("Quitting Rafty worker loop")
+				r.cancelAllWork()
 				return
 			}
 		}
@@ -252,6 +275,16 @@ NEWSERVERS:
 
 				r.leader(r.foreman.GetWorks())
 
+			case <-limboctx.Done():
+				r.logger.Warnf("We are in a Raft Limbo")
+				r.logger.Tracef("Quitting Rafty leader loop")
+				fut := r.raft.Shutdown()
+				if err := fut.Error(); err != nil {
+					r.logger.Errorf("Error while shutting down raft: %w", err)
+				}
+				r.doneCh <- struct{}{}
+				return
+
 			case <-ctx.Done():
 				fut := r.raft.GetConfiguration()
 				if err := fut.Error(); err != nil {
@@ -298,7 +331,7 @@ NEWSERVERS:
 		}
 	}(ctx)
 
-	return nil
+	return limboctx, nil
 }
 
 func (r *Rafty[T, T2]) Done() chan struct{} {
