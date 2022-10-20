@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"runtime"
@@ -13,6 +15,8 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/nats-io/jsm.go/natscontext"
 	"github.com/nats-io/nats.go"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 
@@ -44,6 +48,17 @@ var (
 	optionVerbose           int
 )
 
+var (
+	metricsCurrentWork = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "raftymcraftface",
+			Name:      "current_work",
+			Help:      "Number of work on this member",
+		},
+		[]string{},
+	)
+)
+
 var raftyMcRaftFace = &cobra.Command{
 	Use:          "raftymcraftface",
 	SilenceUsage: true,
@@ -51,6 +66,8 @@ var raftyMcRaftFace = &cobra.Command{
 }
 
 func init() {
+	prometheus.MustRegister(metricsCurrentWork)
+
 	raftyMcRaftFace.PersistentFlags().StringVar(&optionBindAddress, "bind-address", "0.0.0.0", "Raft Address to bind to")
 	raftyMcRaftFace.PersistentFlags().StringVar(&optionAdvertisedAddress, "advertised-address", "127.0.0.1", "Raft Address to advertise on the cluster")
 	raftyMcRaftFace.PersistentFlags().IntVar(&optionPort, "port", 10000, "Raft Port to bind to")
@@ -79,6 +96,14 @@ func run(cmd *cobra.Command, args []string) error {
 
 	logger.Info().Msgf("Starting RaftyMcRaftFace version=%s go=%s", Version, runtime.Version())
 
+	// HTTP
+	mux := http.NewServeMux()
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	mux.Handle("/metrics", promhttp.Handler())
 
 	go http.ListenAndServe(fmt.Sprintf("%s:%d", optionBindAddress, 8080), mux)
 
@@ -297,6 +322,10 @@ func makeLocalDiscoverer(ctx context.Context, _ interfaces.Logger) (interfaces.D
 func makeWork[T string, T2 RaftyMcRaftFaceWork[T]](logger *zerolog.Logger) func(ctx context.Context, nw T2) {
 	return func(ctx context.Context, nw T2) {
 		logger.Info().Int("run", 0).Msgf("I'm %s!!", nw)
+
+		metricsCurrentWork.WithLabelValues().Inc()
+		defer metricsCurrentWork.WithLabelValues().Dec()
+
 		for i := 1; ; i++ {
 			select {
 			case <-time.After(20 * time.Second):
