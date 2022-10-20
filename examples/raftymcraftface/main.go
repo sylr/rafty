@@ -79,33 +79,8 @@ func run(cmd *cobra.Command, args []string) error {
 
 	logger.Info().Msgf("Starting RaftyMcRaftFace version=%s go=%s", Version, runtime.Version())
 
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
 
-	// Rafty Disco
-	var err error
-	var discoverer interfaces.Discoverer
-	if optionNats {
-		logger.Info().Msg("Using NATS KV discovery")
-		if discoverer, err = makeNatsKVDiscoverer(ctx, raftylogger); err != nil {
-			return err
-		}
-	} else if optionConsul {
-		logger.Info().Msg("Using Consul service discovery")
-		if discoverer, err = makeConsulServiceDiscoverer(ctx, raftylogger, consullogger); err != nil {
-			return err
-		}
-	} else if len(optionDNSSRV) > 0 {
-		logger.Info().Msg("Using DNS SRV discovery")
-		if discoverer, err = makeDNSSRVDiscoverer(ctx, raftylogger); err != nil {
-			return err
-		}
-	} else {
-		logger.Info().Msg("Using local discovery")
-		if discoverer, err = makeLocalDiscoverer(ctx, raftylogger); err != nil {
-			return err
-		}
-	}
+	go http.ListenAndServe(fmt.Sprintf("%s:%d", optionBindAddress, 8080), mux)
 
 	// Rafty Foreman
 	formeman := &RaftyMcRaftFaceWorks[string]{
@@ -116,35 +91,75 @@ func run(cmd *cobra.Command, args []string) error {
 		ch: make(chan struct{}),
 	}
 
-	// Rafty
-	r, err := rafty.New[string, RaftyMcRaftFaceWork[string]](
-		discoverer, formeman, makeWork(&logger),
-		rafty.RaftListeningAddressPort[string, RaftyMcRaftFaceWork[string]](optionBindAddress, optionPort),
-		rafty.RaftAdvertisedAddress[string, RaftyMcRaftFaceWork[string]](optionAdvertisedAddress),
-		rafty.Logger[string, RaftyMcRaftFaceWork[string]](raftylogger),
-		rafty.HCLogger[string, RaftyMcRaftFaceWork[string]](raftlogger),
-	)
-	if err != nil {
-		cancel()
-		logger.Trace().Err(err).Msg("New Rafty failed")
-		return err
-	}
-
-	err = r.Start(ctx)
-	if err != nil {
-		logger.Trace().Err(err).Msg("Start Rafty failed")
-		return err
-	}
-
-	logger.Debug().Msg("Waiting for signal")
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGINT, syscall.SIGTERM)
-	s := <-interrupt
 
-	logger.Info().Msgf("Received signal: %v", s)
+LIMBO:
+	for {
+		ctx := context.Background()
 
-	cancel()
-	<-r.Done()
+		// Rafty Disco
+		var err error
+		var discoverer interfaces.Discoverer
+		if optionNats {
+			logger.Info().Msg("Using NATS KV discovery")
+			if discoverer, err = makeNatsKVDiscoverer(ctx, raftylogger); err != nil {
+				return err
+			}
+		} else if optionConsul {
+			logger.Info().Msg("Using Consul service discovery")
+			if discoverer, err = makeConsulServiceDiscoverer(ctx, raftylogger, consullogger); err != nil {
+				return err
+			}
+		} else if len(optionDNSSRV) > 0 {
+			logger.Info().Msg("Using DNS SRV discovery")
+			if discoverer, err = makeDNSSRVDiscoverer(ctx, raftylogger); err != nil {
+				return err
+			}
+		} else {
+			logger.Info().Msg("Using local discovery")
+			if discoverer, err = makeLocalDiscoverer(ctx, raftylogger); err != nil {
+				return err
+			}
+		}
+
+		ctx, cancel := context.WithCancel(ctx)
+
+		// Rafty
+		r, err := rafty.New[string, RaftyMcRaftFaceWork[string]](
+			discoverer, formeman, makeWork(&logger),
+			rafty.RaftListeningAddressPort[string, RaftyMcRaftFaceWork[string]](optionBindAddress, optionPort),
+			rafty.RaftAdvertisedAddress[string, RaftyMcRaftFaceWork[string]](optionAdvertisedAddress),
+			rafty.Logger[string, RaftyMcRaftFaceWork[string]](raftylogger),
+			rafty.HCLogger[string, RaftyMcRaftFaceWork[string]](raftlogger),
+		)
+		if err != nil {
+			cancel()
+			logger.Trace().Err(err).Msg("New Rafty failed")
+			return err
+		}
+
+		var limboctx context.Context
+
+		limboctx, err = r.Start(ctx)
+		if err != nil {
+			logger.Trace().Err(err).Msg("Start Rafty failed")
+			cancel()
+			return err
+		}
+
+		select {
+		case s := <-interrupt:
+			logger.Info().Msgf("Received signal: %v", s)
+			cancel()
+			<-r.Done()
+			break LIMBO
+		case <-limboctx.Done():
+			logger.Warn().Msgf("Rafty deems itself in limbo, exiting")
+			cancel()
+			<-r.Done()
+		}
+	}
 
 	return nil
 }
