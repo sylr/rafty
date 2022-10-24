@@ -122,6 +122,7 @@ func run(cmd *cobra.Command, args []string) error {
 LIMBO:
 	for {
 		ctx := context.Background()
+		ctx, cancel := context.WithCancel(ctx)
 
 		// Rafty Disco
 		var err error
@@ -129,26 +130,28 @@ LIMBO:
 		if optionNats {
 			logger.Info().Msg("Using NATS KV discovery")
 			if discoverer, err = makeNatsKVDiscoverer(ctx, raftylogger); err != nil {
+				cancel()
 				return err
 			}
 		} else if optionConsul {
 			logger.Info().Msg("Using Consul service discovery")
 			if discoverer, err = makeConsulServiceDiscoverer(ctx, raftylogger, consullogger); err != nil {
+				cancel()
 				return err
 			}
 		} else if len(optionDNSSRV) > 0 {
 			logger.Info().Msg("Using DNS SRV discovery")
 			if discoverer, err = makeDNSSRVDiscoverer(ctx, raftylogger); err != nil {
+				cancel()
 				return err
 			}
 		} else {
 			logger.Info().Msg("Using local discovery")
 			if discoverer, err = makeLocalDiscoverer(ctx, raftylogger); err != nil {
+				cancel()
 				return err
 			}
 		}
-
-		ctx, cancel := context.WithCancel(ctx)
 
 		// Rafty
 		r, err := rafty.New[string, RaftyMcRaftFaceWork[string]](
