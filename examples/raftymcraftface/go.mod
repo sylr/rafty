@@ -11,11 +11,12 @@ require (
 	github.com/prometheus/client_golang v1.13.0
 	github.com/rs/zerolog v1.28.0
 	github.com/spf13/cobra v1.6.0
-	sylr.dev/rafty v0.0.0-20221020181443-d8a3f5b78806
-	sylr.dev/rafty/discovery/consul v0.0.0-20221020181443-d8a3f5b78806
-	sylr.dev/rafty/discovery/dns v0.0.0-20221020181443-d8a3f5b78806
-	sylr.dev/rafty/discovery/nats v0.0.0-20221020181443-d8a3f5b78806
-	sylr.dev/rafty/logger/zerolog v0.0.0-20221020181443-d8a3f5b78806
+	sylr.dev/rafty v0.0.0-20221024083652-dd21923374b1
+	sylr.dev/rafty/discovery/consul v0.0.0-20221024083652-dd21923374b1
+	sylr.dev/rafty/discovery/dns v0.0.0-20221024083652-dd21923374b1
+	sylr.dev/rafty/discovery/nats v0.0.0-20221024083652-dd21923374b1
+	sylr.dev/rafty/distributor/modulo v0.0.0-20221024083652-dd21923374b1
+	sylr.dev/rafty/logger/zerolog v0.0.0-20221024083652-dd21923374b1
 )
 
 require (
@@ -46,6 +47,7 @@ require (
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	golang.org/x/crypto v0.0.0-20221012134737-56aed061732a // indirect
+	golang.org/x/exp v0.0.0-20221019170559-20944726eadf // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/net v0.0.0-20221017152216-f25eb7ecb193 // indirect
 	golang.org/x/sys v0.1.0 // indirect

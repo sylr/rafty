@@ -24,6 +24,7 @@ import (
 	discoconsul "sylr.dev/rafty/discovery/consul"
 	discodns "sylr.dev/rafty/discovery/dns"
 	disconats "sylr.dev/rafty/discovery/nats"
+	distribmodulo "sylr.dev/rafty/distributor/modulo"
 	"sylr.dev/rafty/interfaces"
 	raftyzerolog "sylr.dev/rafty/logger/zerolog"
 )
@@ -39,6 +40,7 @@ var (
 	optionClusterSize       int
 	optionConsul            bool
 	optionDNSSRV            string
+	optionModulo            bool
 	optionNats              bool
 	optionNatsContext       string
 	optionNatsURL           string
@@ -74,6 +76,7 @@ func init() {
 	raftyMcRaftFace.PersistentFlags().IntVar(&optionClusterSize, "cluster-size", 10, "Raft cluster size")
 	raftyMcRaftFace.PersistentFlags().BoolVar(&optionConsul, "consul", false, "Use Consul disco")
 	raftyMcRaftFace.PersistentFlags().StringVar(&optionDNSSRV, "dns-srv", "", "Use DNS SRV disco")
+	raftyMcRaftFace.PersistentFlags().BoolVar(&optionModulo, "modulo", false, "Use Modulo distributor")
 	raftyMcRaftFace.PersistentFlags().BoolVar(&optionNats, "nats", false, "Use Nats disco")
 	raftyMcRaftFace.PersistentFlags().StringVar(&optionNatsContext, "nats-context", "", "Choose a Nats context")
 	raftyMcRaftFace.PersistentFlags().StringVar(&optionNatsURL, "nats-url", "", "Nats URL")
@@ -119,6 +122,18 @@ func run(cmd *cobra.Command, args []string) error {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGINT, syscall.SIGTERM)
 
+	options := []rafty.Option[string, RaftyMcRaftFaceWork[string]]{
+		rafty.RaftListeningAddressPort[string, RaftyMcRaftFaceWork[string]](optionBindAddress, optionPort),
+		rafty.RaftAdvertisedAddress[string, RaftyMcRaftFaceWork[string]](optionAdvertisedAddress),
+		rafty.Logger[string, RaftyMcRaftFaceWork[string]](raftylogger),
+		rafty.HCLogger[string, RaftyMcRaftFaceWork[string]](raftlogger),
+	}
+
+	if optionModulo {
+		distrib, _ := distribmodulo.New[string, RaftyMcRaftFaceWork[string]]()
+		options = append(options, rafty.Distributor[string, RaftyMcRaftFaceWork[string]](distrib))
+	}
+
 LIMBO:
 	for {
 		ctx := context.Background()
@@ -154,13 +169,7 @@ LIMBO:
 		}
 
 		// Rafty
-		r, err := rafty.New[string, RaftyMcRaftFaceWork[string]](
-			discoverer, formeman, makeWork(&logger),
-			rafty.RaftListeningAddressPort[string, RaftyMcRaftFaceWork[string]](optionBindAddress, optionPort),
-			rafty.RaftAdvertisedAddress[string, RaftyMcRaftFaceWork[string]](optionAdvertisedAddress),
-			rafty.Logger[string, RaftyMcRaftFaceWork[string]](raftylogger),
-			rafty.HCLogger[string, RaftyMcRaftFaceWork[string]](raftlogger),
-		)
+		r, err := rafty.New[string, RaftyMcRaftFaceWork[string]](discoverer, formeman, makeWork(&logger), options...)
 		if err != nil {
 			cancel()
 			logger.Trace().Err(err).Msg("New Rafty failed")
