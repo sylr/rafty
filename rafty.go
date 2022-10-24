@@ -131,6 +131,13 @@ func RaftAdvertisedAddress[T any, T2 interfaces.Work[T]](address string) Option[
 	}
 }
 
+func Distributor[T any, T2 interfaces.Work[T]](distrib interfaces.Distributor[T, T2]) Option[T, T2] {
+	return func(r *Rafty[T, T2]) error {
+		r.distributor = distrib
+		return nil
+	}
+}
+
 func (r *Rafty[T, T2]) Start(ctx context.Context) (context.Context, error) {
 	configuration := raft.Configuration{}
 
