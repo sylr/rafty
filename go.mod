@@ -5,7 +5,8 @@ go 1.19
 require (
 	github.com/hashicorp/go-hclog v1.3.1
 	github.com/hashicorp/raft v1.3.11
-	sylr.dev/rafty/distributor/consistent v0.0.0-20230125111348-4424dd2cf508
+	sylr.dev/rafty/distributor/consistent v0.0.0-20230125114846-28c00df1c9e8
+	sylr.dev/rafty/interfaces v0.0.0-20230125114846-28c00df1c9e8
 )
 
 require (

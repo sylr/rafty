@@ -11,11 +11,12 @@ require (
 	github.com/prometheus/client_golang v1.13.0
 	github.com/rs/zerolog v1.28.0
 	github.com/spf13/cobra v1.6.0
-	sylr.dev/rafty v0.0.0-20230125111348-4424dd2cf508
+	sylr.dev/rafty v0.0.0-20230125114846-28c00df1c9e8
 	sylr.dev/rafty/discovery/consul v0.0.0-20230125111348-4424dd2cf508
 	sylr.dev/rafty/discovery/dns v0.0.0-20230125111348-4424dd2cf508
 	sylr.dev/rafty/discovery/nats v0.0.0-20230125111348-4424dd2cf508
 	sylr.dev/rafty/distributor/modulo v0.0.0-20230125111348-4424dd2cf508
+	sylr.dev/rafty/interfaces v0.0.0-20230125114846-28c00df1c9e8
 	sylr.dev/rafty/logger/zerolog v0.0.0-20230125111348-4424dd2cf508
 )
 
@@ -53,5 +54,5 @@ require (
 	golang.org/x/sys v0.1.0 // indirect
 	golang.org/x/tools v0.1.12 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
-	sylr.dev/rafty/distributor/consistent v0.0.0-20221024085234-acc7afb014a4 // indirect
+	sylr.dev/rafty/distributor/consistent v0.0.0-20230125111348-4424dd2cf508 // indirect
 )
