@@ -143,3 +143,5 @@ gopkg.in/yaml.v2 v2.2.4/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
 gopkg.in/yaml.v2 v2.2.5/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+sylr.dev/rafty v0.0.0-20221024085234-acc7afb014a4 h1:A9z5bQ4TdipT4P0axY+mzZ/b5wIfeUjgfS7ljk8BTss=
+sylr.dev/rafty v0.0.0-20221024085234-acc7afb014a4/go.mod h1:IgY11LHEKUHfHog+bPf+/C117wCBMvgRWXrgdsOH4bo=

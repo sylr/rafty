@@ -6,7 +6,7 @@ require (
 	github.com/buraksezer/consistent v0.9.0
 	github.com/cespare/xxhash v1.1.0
 	github.com/hashicorp/raft v1.3.11
-	sylr.dev/rafty v0.0.0-20221018135550-627952822d8b
+	sylr.dev/rafty v0.0.0-20221024085234-acc7afb014a4
 )
 
 require (
@@ -20,5 +20,3 @@ require (
 	github.com/mattn/go-isatty v0.0.16 // indirect
 	golang.org/x/sys v0.1.0 // indirect
 )
-
-replace sylr.dev/rafty => ../..
