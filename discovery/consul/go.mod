@@ -6,7 +6,7 @@ require (
 	github.com/hashicorp/consul/api v1.15.2
 	github.com/hashicorp/go-hclog v1.3.1
 	github.com/hashicorp/raft v1.3.11
-	sylr.dev/rafty v0.0.0-20221024085234-acc7afb014a4
+	sylr.dev/rafty v0.0.0-20230125111348-4424dd2cf508
 )
 
 require (

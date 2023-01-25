@@ -6,7 +6,7 @@ require (
 	github.com/buraksezer/consistent v0.9.0
 	github.com/cespare/xxhash v1.1.0
 	github.com/hashicorp/raft v1.3.11
-	sylr.dev/rafty v0.0.0-20221024085234-acc7afb014a4
+	sylr.dev/rafty v0.0.0-20230125111348-4424dd2cf508
 )
 
 require (

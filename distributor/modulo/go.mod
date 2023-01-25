@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/hashicorp/raft v1.3.11
-	sylr.dev/rafty v0.0.0-20221018135550-627952822d8b
+	sylr.dev/rafty v0.0.0-20230125111348-4424dd2cf508
 )
 
 require (
@@ -19,5 +19,3 @@ require (
 	golang.org/x/exp v0.0.0-20221019170559-20944726eadf
 	golang.org/x/sys v0.1.0 // indirect
 )
-
-replace sylr.dev/rafty => ../..

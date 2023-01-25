@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/hashicorp/raft v1.3.11
 	github.com/nats-io/nats.go v1.18.0
-	sylr.dev/rafty v0.0.0-20221018135550-627952822d8b
+	sylr.dev/rafty v0.0.0-20230125111348-4424dd2cf508
 )
 
 require (
