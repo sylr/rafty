@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hashicorp/raft"
-
-	"sylr.dev/rafty/interfaces"
+	"sylr.dev/rafty"
 )
 
 type LocalDiscoverer struct {
@@ -18,9 +16,11 @@ type LocalDiscoverer struct {
 	interval       time.Duration
 }
 
-var _ interfaces.Discoverer = (*LocalDiscoverer)(nil)
+var _ rafty.Discoverer = (*LocalDiscoverer)(nil)
 
 func (ld *LocalDiscoverer) Start(ctx context.Context) {
+	ld.ch <- struct{}{}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -36,24 +36,24 @@ func (ld *LocalDiscoverer) NewServers() chan struct{} {
 	return ld.ch
 }
 
-func (ld *LocalDiscoverer) GetServers() []raft.Server {
-	servers := make([]raft.Server, ld.clusterSize)
+func (ld *LocalDiscoverer) GetServers() []rafty.Server {
+	servers := make([]rafty.Server, ld.clusterSize)
 
 	for i := 0; i < ld.clusterSize; i++ {
-		address := raft.ServerAddress(fmt.Sprintf("%s:%d", ld.advertisedAddr, ld.startPort+i))
+		address := rafty.ServerAddress(fmt.Sprintf("%s:%d", ld.advertisedAddr, ld.startPort+i))
 
-		suffrage := raft.Voter
+		suffrage := rafty.Voter
 		if i > 8 {
-			suffrage = raft.Nonvoter
+			suffrage = rafty.Nonvoter
 		} else {
 			// Make the number of voters odd if cluster size greater than 3
 			if ld.clusterSize > 3 && i == ld.clusterSize-1 && i%2 == 1 {
-				suffrage = raft.Nonvoter
+				suffrage = rafty.Nonvoter
 			}
 		}
 
-		servers[i] = raft.Server{
-			ID:       raft.ServerID(address),
+		servers[i] = rafty.Server{
+			ID:       rafty.ServerID(address),
 			Address:  address,
 			Suffrage: suffrage,
 		}

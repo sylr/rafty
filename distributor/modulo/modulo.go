@@ -4,21 +4,19 @@ package distribmodulo
 
 import (
 	"math"
+	"sort"
 
-	"github.com/hashicorp/raft"
-	"golang.org/x/exp/slices"
-
-	"sylr.dev/rafty/interfaces"
+	"sylr.dev/rafty"
 )
 
-type distributor[T any, T2 interfaces.Work[T]] struct {
+type distributor[T any, T2 rafty.Work[T]] struct {
 }
 
-var _ interfaces.Distributor[string, interfaces.Work[string]] = (*distributor[string, interfaces.Work[string]])(nil)
+var _ rafty.Distributor[string, rafty.Work[string]] = (*distributor[string, rafty.Work[string]])(nil)
 
-type Option[T any, T2 interfaces.Work[T]] func(*distributor[T, T2]) error
+type Option[T any, T2 rafty.Work[T]] func(*distributor[T, T2]) error
 
-func New[T any, T2 interfaces.Work[T]](options ...Option[T, T2]) (*distributor[T, T2], error) {
+func New[T any, T2 rafty.Work[T]](options ...Option[T, T2]) (*distributor[T, T2], error) {
 	d := &distributor[T, T2]{}
 
 	for _, option := range options {
@@ -30,14 +28,16 @@ func New[T any, T2 interfaces.Work[T]](options ...Option[T, T2]) (*distributor[T
 	return d, nil
 }
 
-func (d *distributor[T, T2]) Distribute(servers []raft.Server, works []T2) map[raft.ServerID][]T2 {
-	output := make(map[raft.ServerID][]T2)
+func (d *distributor[T, T2]) Distribute(servers []rafty.Server, works []T2) map[rafty.ServerID][]T2 {
+	output := make(map[rafty.ServerID][]T2)
 
-	sortFunc := func(a, b raft.Server) bool {
+	sortFunc := func(a, b rafty.Server) bool {
 		return a.ID < b.ID
 	}
 
-	slices.SortFunc(servers, sortFunc)
+	sort.Slice(servers, func(i, j int) bool {
+		return sortFunc(servers[i], servers[j])
+	})
 
 	sl, wl := len(servers), len(works)
 	oc := int(math.Ceil(float64(sl) / float64(wl)))

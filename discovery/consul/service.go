@@ -6,25 +6,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"sync"
 	"time"
 
 	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/consul/api/watch"
-	"github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/raft"
 
+	"sylr.dev/rafty"
 	"sylr.dev/rafty/discovery"
-	"sylr.dev/rafty/interfaces"
-	"sylr.dev/rafty/logger"
 )
 
 // ServiceDiscoverer is a Rafty discoverer which leverages the use of Consul services.
 // This discoverer will register itself upon calling Start() and deregister itself
 // when context given to Start() is canceled.
 type ServiceDiscoverer struct {
-	logger               interfaces.Logger
-	hclogger             hclog.Logger
+	logger               rafty.Logger
+	consulLogger         *log.Logger
 	advertisedAddr       string
 	advertisedPort       int
 	consulNode           string
@@ -36,24 +35,24 @@ type ServiceDiscoverer struct {
 	interval             time.Duration
 	ch                   chan struct{}
 	done                 chan struct{}
-	currentServers       []raft.Server
+	currentServers       []rafty.Server
 	mux                  sync.Mutex
 }
 
-var _ interfaces.Discoverer = (*ServiceDiscoverer)(nil)
+var _ rafty.Discoverer = (*ServiceDiscoverer)(nil)
 
 type ServiceOption func(*ServiceDiscoverer) error
 
-func Logger(logger interfaces.Logger) ServiceOption {
+func Logger(logger rafty.Logger) ServiceOption {
 	return func(disco *ServiceDiscoverer) error {
 		disco.logger = logger
 		return nil
 	}
 }
 
-func HCLogger(logger hclog.Logger) ServiceOption {
+func ConsulLogger(logger *log.Logger) ServiceOption {
 	return func(disco *ServiceDiscoverer) error {
-		disco.hclogger = logger
+		disco.consulLogger = logger
 		return nil
 	}
 }
@@ -94,7 +93,10 @@ func NewServiceDiscoverer(advertisedAddr string, advertisedPort int, consulClien
 	}
 
 	if d.logger == nil {
-		d.logger = &logger.NullLogger{}
+		d.logger = &rafty.NullLogger{}
+	}
+	if d.consulLogger == nil {
+		d.consulLogger = log.New(io.Discard, "", 0)
 	}
 
 	return d, nil
@@ -135,7 +137,7 @@ func (d *ServiceDiscoverer) Start(ctx context.Context) error {
 	d.consulServiceWatcher.HybridHandler = d.makeServiceWatcherHandler(ctx)
 
 	go func() {
-		err := d.consulServiceWatcher.RunWithClientAndHclog(d.consulClient, d.hclogger)
+		err := d.consulServiceWatcher.RunWithClientAndLogger(d.consulClient, d.consulLogger)
 		if err != nil {
 			d.logger.Errorf("disco-consul-service: watcher failed: %w", err)
 		}
@@ -189,7 +191,7 @@ func (d *ServiceDiscoverer) NewServers() chan struct{} {
 	return d.ch
 }
 
-func (d *ServiceDiscoverer) GetServers() []raft.Server {
+func (d *ServiceDiscoverer) GetServers() []rafty.Server {
 	d.mux.Lock()
 	defer d.mux.Unlock()
 
@@ -200,7 +202,7 @@ func (d *ServiceDiscoverer) GetServers() []raft.Server {
 	return d.currentServers
 }
 
-func (d *ServiceDiscoverer) getServers() []raft.Server {
+func (d *ServiceDiscoverer) getServers() []rafty.Server {
 	opts := &api.QueryOptions{AllowStale: false, RequireConsistent: true, UseCache: true}
 	members, _, err := d.consulClient.Health().Service(d.consulServiceName, "", true, opts)
 	if err != nil {
@@ -208,13 +210,13 @@ func (d *ServiceDiscoverer) getServers() []raft.Server {
 		return nil
 	}
 
-	raftServers := make([]raft.Server, 0, len(members))
+	raftServers := make([]rafty.Server, 0, len(members))
 	for _, member := range members {
 		addrPort := fmt.Sprintf("%s:%d", member.Service.Address, member.Service.Port)
-		raftServers = append(raftServers, raft.Server{
-			ID:       raft.ServerID(addrPort),
-			Address:  raft.ServerAddress(addrPort),
-			Suffrage: raft.Voter,
+		raftServers = append(raftServers, rafty.Server{
+			ID:       rafty.ServerID(addrPort),
+			Address:  rafty.ServerAddress(addrPort),
+			Suffrage: rafty.Voter,
 		})
 	}
 

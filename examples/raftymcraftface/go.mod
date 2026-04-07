@@ -1,11 +1,9 @@
 module sylr.dev/rafty/examples/raftymcraftface
 
-go 1.19
+go 1.25.0
 
 require (
 	github.com/hashicorp/consul/api v1.15.2
-	github.com/hashicorp/go-hclog v1.3.1
-	github.com/hashicorp/raft v1.3.11
 	github.com/nats-io/jsm.go v0.0.34
 	github.com/nats-io/nats.go v1.18.0
 	github.com/prometheus/client_golang v1.13.0
@@ -22,14 +20,13 @@ require (
 require (
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/buraksezer/consistent v0.9.0 // indirect
-	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/fatih/color v1.13.0 // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
+	github.com/hashicorp/go-hclog v1.3.1 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
-	github.com/hashicorp/go-msgpack v1.1.5 // indirect
 	github.com/hashicorp/go-rootcerts v1.0.2 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/hashicorp/serf v0.10.1 // indirect
@@ -46,12 +43,23 @@ require (
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	go.etcd.io/etcd/raft/v3 v3.5.29 // indirect
 	golang.org/x/crypto v0.0.0-20221012134737-56aed061732a // indirect
-	golang.org/x/exp v0.0.0-20221019170559-20944726eadf // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/net v0.0.0-20221017152216-f25eb7ecb193 // indirect
 	golang.org/x/sys v0.1.0 // indirect
 	golang.org/x/tools v0.1.12 // indirect
-	google.golang.org/protobuf v1.28.1 // indirect
-	sylr.dev/rafty/distributor/consistent v0.0.0-20221024085234-acc7afb014a4 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 )
+
+replace sylr.dev/rafty => ../..
+
+replace sylr.dev/rafty/discovery/consul => ../../discovery/consul
+
+replace sylr.dev/rafty/discovery/dns => ../../discovery/dns
+
+replace sylr.dev/rafty/discovery/nats => ../../discovery/nats
+
+replace sylr.dev/rafty/distributor/modulo => ../../distributor/modulo
+
+replace sylr.dev/rafty/logger/zerolog => ../../logger/zerolog

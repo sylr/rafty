@@ -3,29 +3,24 @@ package rafty
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"math"
+	"sort"
 	"time"
 
-	"github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/raft"
-
-	distribconsistent "sylr.dev/rafty/distributor/consistent"
-	"sylr.dev/rafty/interfaces"
-	"sylr.dev/rafty/logger"
+	etcdraft "go.etcd.io/etcd/raft/v3"
 )
 
 // Rafty
-type Rafty[T any, T2 interfaces.Work[T]] struct {
-	logger   interfaces.Logger
-	hcLogger hclog.Logger
+type Rafty[T any, T2 Work[T]] struct {
+	logger Logger
 
-	raft           *raft.Raft
-	raftID         raft.ServerID
-	discoverer     interfaces.Discoverer
-	foreman        interfaces.Foreman[T, T2]
-	distributor    interfaces.Distributor[T, T2]
-	currentServers []raft.Server
+	raft           *raftNode[T, T2]
+	raftID         ServerID
+	discoverer     Discoverer
+	foreman        Foreman[T, T2]
+	distributor    Distributor[T, T2]
+	currentServers []Server
 
 	listeningAddress  string
 	listeningPort     int
@@ -39,16 +34,16 @@ type Rafty[T any, T2 interfaces.Work[T]] struct {
 	doneCh    chan struct{}
 }
 
-func New[T any, T2 interfaces.Work[T]](disco interfaces.Discoverer, foreman interfaces.Foreman[T, T2], start func(context.Context, T2), opts ...Option[T, T2]) (*Rafty[T, T2], error) {
+func New[T any, T2 Work[T]](disco Discoverer, foreman Foreman[T, T2], start func(context.Context, T2), opts ...Option[T, T2]) (*Rafty[T, T2], error) {
 	r := &Rafty[T, T2]{
-		logger:         &logger.StdLogger{},
+		logger:         &StdLogger{},
 		startFunc:      start,
 		discoverer:     disco,
 		foreman:        foreman,
-		currentServers: make([]raft.Server, 0),
+		currentServers: make([]Server, 0),
 		ch:             make(chan RaftLog[T, T2]),
 		currentWork: RaftLog[T, T2]{
-			Disco: make(map[raft.ServerID][]T2),
+			Disco: make(map[ServerID][]T2),
 		},
 		workCancel: make(map[string]context.CancelFunc),
 		doneCh:     make(chan struct{}),
@@ -61,10 +56,10 @@ func New[T any, T2 interfaces.Work[T]](disco interfaces.Discoverer, foreman inte
 	}
 
 	if r.logger == nil {
-		r.logger = &logger.StdLogger{}
+		r.logger = &StdLogger{}
 	}
 	if r.distributor == nil {
-		r.distributor, _ = distribconsistent.New[T, T2]()
+		r.distributor = defaultDistributor[T, T2]{}
 	}
 	if len(r.listeningAddress) == 0 {
 		r.listeningAddress = "0.0.0.0"
@@ -76,47 +71,21 @@ func New[T any, T2 interfaces.Work[T]](disco interfaces.Discoverer, foreman inte
 		r.advertisedAddress = "127.0.0.1"
 	}
 
-	r.raftID = raft.ServerID(fmt.Sprintf("%s:%d", r.advertisedAddress, r.listeningPort))
-
-	config := RaftConfig{
-		ListeningAddress:  r.listeningAddress,
-		ListeningPort:     r.listeningPort,
-		AdvertisedAddress: r.advertisedAddress,
-		Logger:            r.logger,
-		HCLogger:          r.hcLogger,
-		ServerID:          r.raftID,
-	}
-
-	if r.raft == nil {
-		r.logger.Debugf("No raft instance provided, creating a default one")
-		var err error
-		r.raft, err = NewRaft(config, r.ch)
-
-		if err != nil {
-			return nil, err
-		}
-	}
+	r.raftID = ServerID(fmt.Sprintf("%s:%d", r.advertisedAddress, r.listeningPort))
 
 	return r, nil
 }
 
-type Option[T any, T2 interfaces.Work[T]] func(*Rafty[T, T2]) error
+type Option[T any, T2 Work[T]] func(*Rafty[T, T2]) error
 
-func Logger[T any, T2 interfaces.Work[T]](logger interfaces.Logger) Option[T, T2] {
+func WithLogger[T any, T2 Work[T]](logger Logger) Option[T, T2] {
 	return func(r *Rafty[T, T2]) error {
 		r.logger = logger
 		return nil
 	}
 }
 
-func HCLogger[T any, T2 interfaces.Work[T]](logger hclog.Logger) Option[T, T2] {
-	return func(r *Rafty[T, T2]) error {
-		r.hcLogger = logger
-		return nil
-	}
-}
-
-func RaftListeningAddressPort[T any, T2 interfaces.Work[T]](address string, port int) Option[T, T2] {
+func RaftListeningAddressPort[T any, T2 Work[T]](address string, port int) Option[T, T2] {
 	return func(r *Rafty[T, T2]) error {
 		r.listeningAddress = address
 		r.listeningPort = port
@@ -124,14 +93,14 @@ func RaftListeningAddressPort[T any, T2 interfaces.Work[T]](address string, port
 	}
 }
 
-func RaftAdvertisedAddress[T any, T2 interfaces.Work[T]](address string) Option[T, T2] {
+func RaftAdvertisedAddress[T any, T2 Work[T]](address string) Option[T, T2] {
 	return func(r *Rafty[T, T2]) error {
 		r.advertisedAddress = address
 		return nil
 	}
 }
 
-func Distributor[T any, T2 interfaces.Work[T]](distrib interfaces.Distributor[T, T2]) Option[T, T2] {
+func WithDistributor[T any, T2 Work[T]](distrib Distributor[T, T2]) Option[T, T2] {
 	return func(r *Rafty[T, T2]) error {
 		r.distributor = distrib
 		return nil
@@ -139,8 +108,6 @@ func Distributor[T any, T2 interfaces.Work[T]](distrib interfaces.Distributor[T,
 }
 
 func (r *Rafty[T, T2]) Start(ctx context.Context) (context.Context, error) {
-	configuration := raft.Configuration{}
-
 NEWSERVERS:
 	r.logger.Tracef("Waiting for disco to send first servers list")
 	select {
@@ -158,13 +125,9 @@ NEWSERVERS:
 	}
 
 	found := false
-	isVoter := false
 	for _, server := range servers {
 		if server.ID == r.raftID {
 			found = true
-			if server.Suffrage == raft.Voter {
-				isVoter = true
-			}
 			break
 		}
 	}
@@ -174,27 +137,21 @@ NEWSERVERS:
 		goto NEWSERVERS
 	}
 
-	if isVoter {
-		r.logger.Infof("Server is voter, attempting to bootstrap cluster")
-		configuration.Servers = append(configuration.Servers, servers...)
-		fut := r.raft.BootstrapCluster(configuration)
+	r.currentServers = servers
 
-		if err := fut.Error(); err != nil {
-			r.logger.Tracef("Bootstrapping cluster failed: %v", err)
-			if !errors.Is(err, raft.ErrCantBootstrap) {
-				return nil, fut.Error()
-			}
-		} else {
-			_, leaderID := r.raft.LeaderWithID()
-			if leaderID == r.raftID {
-				r.updateServers(servers)
-			}
-		}
+	config := RaftConfig{
+		ListeningAddress:  r.listeningAddress,
+		ListeningPort:     r.listeningPort,
+		AdvertisedAddress: r.advertisedAddress,
+		Logger:            r.logger,
+		ServerID:          r.raftID,
 	}
 
-	raftObservation := make(chan raft.Observation)
-	observer := raft.NewObserver(raftObservation, false, nil)
-	r.raft.RegisterObserver(observer)
+	var err error
+	r.raft, err = NewRaft(config, r.ch, servers)
+	if err != nil {
+		return nil, err
+	}
 
 	limboctx, limbocancel := context.WithCancel(context.Background())
 
@@ -204,7 +161,7 @@ NEWSERVERS:
 		for {
 			select {
 			case <-time.After(5 * time.Second):
-				if r.raft.State() == raft.Candidate {
+				if r.raft.State() == etcdraft.StateCandidate {
 					if !candidate {
 						candidateSince = time.Now()
 					} else if time.Since(candidateSince) > 10*time.Second {
@@ -245,12 +202,6 @@ NEWSERVERS:
 				if leader {
 					r.logger.Infof("This node is now the leader, starting the foreman")
 					r.foreman.Start()
-
-					fut := r.raft.GetConfiguration()
-					if err := fut.Error(); err != nil {
-						r.logger.Errorf("Error getting raft configuration: %v", err)
-					}
-
 					r.updateServers(r.discoverer.GetServers())
 					r.leader(r.foreman.GetWorks())
 				} else {
@@ -263,7 +214,7 @@ NEWSERVERS:
 
 				r.logger.Infof("Received new servers from discovery: %v", servers)
 
-				if r.raft.State() != raft.Leader {
+				if r.raft.State() != etcdraft.StateLeader {
 					r.currentServers = servers
 					continue
 				}
@@ -274,7 +225,7 @@ NEWSERVERS:
 				r.leader(r.foreman.GetWorks())
 
 			case <-r.foreman.NewWorks():
-				if r.raft.State() != raft.Leader {
+				if r.raft.State() != etcdraft.StateLeader {
 					continue
 				}
 
@@ -285,39 +236,19 @@ NEWSERVERS:
 			case <-limboctx.Done():
 				r.logger.Warnf("We are in a Raft Limbo")
 				r.logger.Tracef("Quitting Rafty leader loop")
-				fut := r.raft.Shutdown()
-				if err := fut.Error(); err != nil {
-					r.logger.Errorf("Error while shutting down raft: %w", err)
+				if err := r.raft.Shutdown(); err != nil {
+					r.logger.Errorf("Error while shutting down raft: %v", err)
 				}
 				r.doneCh <- struct{}{}
 				return
 
 			case <-ctx.Done():
-				fut := r.raft.GetConfiguration()
-				if err := fut.Error(); err != nil {
-					r.logger.Errorf("Error getting raft configuration: %v", err)
-				} else {
-					if len(fut.Configuration().Servers) > 1 && r.raft.State() == raft.Leader {
-						r.logger.Infof("Transfering leadership")
-						fut := r.raft.LeadershipTransfer()
-						if err := fut.Error(); err != nil {
-							r.logger.Errorf("Failed to transfer leadership: %v", err)
-						}
-
-					OBSERVATIONS:
-						for observation := range raftObservation {
-							switch obs := observation.Data.(type) {
-							case raft.LeaderObservation:
-								if obs.Leader != "" {
-									r.logger.Infof("Final leader observation: %v", obs)
-									break OBSERVATIONS
-								}
-							}
-						}
-					}
+				if len(r.currentServers) > 1 && r.raft.State() == etcdraft.StateLeader {
+					r.logger.Infof("Transfering leadership")
+					r.raft.TransferLeadership()
 				}
 
-				if d, ok := r.discoverer.(interfaces.Finalizer); ok {
+				if d, ok := r.discoverer.(Finalizer); ok {
 					select {
 					case <-d.Done():
 					case <-time.After(5 * time.Second):
@@ -325,8 +256,7 @@ NEWSERVERS:
 					}
 				}
 
-				sfut := r.raft.Shutdown()
-				if err := sfut.Error(); err != nil {
+				if err := r.raft.Shutdown(); err != nil {
 					r.logger.Errorf("Failed shutdown: %v", err)
 				}
 
@@ -355,16 +285,14 @@ func (r *Rafty[T, T2]) leader(newWork []T2) {
 		return
 	}
 
-	fut := r.raft.Apply(js, time.Second)
-	if err := fut.Error(); err != nil {
+	if err := r.raft.Propose(js); err != nil {
 		r.logger.Errorf("Failed to apply new log: %s", err)
 	}
 }
 
-func (r *Rafty[T, T2]) removeServer(id raft.ServerID) {
+func (r *Rafty[T, T2]) removeServer(id ServerID) {
 	r.logger.Infof("Removing server from cluster: %s", id)
-	fut := r.raft.RemoveServer(id, 0, time.Second)
-	if err := fut.Error(); err != nil {
+	if err := r.raft.RemoveServer(id); err != nil {
 		r.logger.Errorf("Failed to remove server from cluster: %s", err)
 	}
 
@@ -381,7 +309,7 @@ func (r *Rafty[T, T2]) removeServer(id raft.ServerID) {
 	}
 }
 
-func (r *Rafty[T, T2]) updateServers(servers []raft.Server) {
+func (r *Rafty[T, T2]) updateServers(servers []Server) {
 	for _, server := range servers {
 		found := false
 		updated := false
@@ -396,16 +324,8 @@ func (r *Rafty[T, T2]) updateServers(servers []raft.Server) {
 		}
 
 		if !found || updated {
-			var fut raft.IndexFuture
-			if server.Suffrage == raft.Voter {
-				r.logger.Debugf("Adding new server as voter to cluster: %s found=%v updated=%v", server.ID, found, updated)
-				fut = r.raft.AddVoter(server.ID, server.Address, 0, time.Second)
-			} else {
-				r.logger.Debugf("Adding new server as non voter to cluster: %s found=%v updated=%v", server.ID, found, updated)
-				fut = r.raft.AddNonvoter(server.ID, server.Address, 0, time.Second)
-			}
-
-			if err := fut.Error(); err != nil {
+			r.logger.Debugf("Adding server to cluster: %s found=%v updated=%v", server.ID, found, updated)
+			if err := r.raft.AddServer(server); err != nil {
 				r.logger.Errorf("Failed to add server to cluster: %s", err)
 			}
 		}
@@ -421,10 +341,8 @@ func (r *Rafty[T, T2]) updateServers(servers []raft.Server) {
 
 		if !found {
 			r.logger.Debugf("Removing server from the cluster: %s", currentServer.ID)
-			fut := r.raft.RemoveServer(currentServer.ID, 0, time.Second)
-
-			if err := fut.Error(); err != nil {
-				r.logger.Errorf("Failed to add server to cluster: %s", err)
+			if err := r.raft.RemoveServer(currentServer.ID); err != nil {
+				r.logger.Errorf("Failed to remove server from cluster: %s", err)
 				return
 			}
 		}
@@ -464,7 +382,37 @@ func (r *Rafty[T, T2]) cancelAllWork() {
 	r.currentWork.Disco[r.raftID] = make([]T2, 0)
 }
 
-func (r *Rafty[T, T2]) cancelWork(w interfaces.Work[T]) {
-	r.workCancel[w.ID()]()
-	delete(r.workCancel, w.ID())
+func (r *Rafty[T, T2]) cancelWork(w Work[T]) {
+	if cancel, ok := r.workCancel[w.ID()]; ok {
+		cancel()
+		delete(r.workCancel, w.ID())
+	}
+}
+
+type defaultDistributor[T any, T2 Work[T]] struct{}
+
+func (defaultDistributor[T, T2]) Distribute(servers []Server, works []T2) map[ServerID][]T2 {
+	output := make(map[ServerID][]T2)
+	if len(servers) == 0 || len(works) == 0 {
+		return output
+	}
+
+	sorted := append([]Server(nil), servers...)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].ID < sorted[j].ID
+	})
+
+	serverCount := len(sorted)
+	workCount := len(works)
+	capacity := int(math.Ceil(float64(workCount) / float64(serverCount)))
+
+	for i, work := range works {
+		server := sorted[i%serverCount]
+		if _, ok := output[server.ID]; !ok {
+			output[server.ID] = make([]T2, 0, capacity)
+		}
+		output[server.ID] = append(output[server.ID], work)
+	}
+
+	return output
 }

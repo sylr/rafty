@@ -1,7 +1,7 @@
 package main
 
 import (
-	. "sylr.dev/rafty/interfaces"
+	. "sylr.dev/rafty"
 )
 
 var _ Work[string] = (*RaftyMcRaftFaceWork[string])(nil)

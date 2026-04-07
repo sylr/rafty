@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -12,7 +14,6 @@ import (
 	"time"
 
 	consul "github.com/hashicorp/consul/api"
-	"github.com/hashicorp/go-hclog"
 	"github.com/nats-io/jsm.go/natscontext"
 	"github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus"
@@ -25,7 +26,6 @@ import (
 	discodns "sylr.dev/rafty/discovery/dns"
 	disconats "sylr.dev/rafty/discovery/nats"
 	distribmodulo "sylr.dev/rafty/distributor/modulo"
-	"sylr.dev/rafty/interfaces"
 	raftyzerolog "sylr.dev/rafty/logger/zerolog"
 )
 
@@ -45,7 +45,6 @@ var (
 	optionNatsContext       string
 	optionNatsURL           string
 	optionLogCaller         bool
-	optionLogRaft           bool
 	optionLogConsul         bool
 	optionVerbose           int
 )
@@ -82,7 +81,6 @@ func init() {
 	raftyMcRaftFace.PersistentFlags().StringVar(&optionNatsURL, "nats-url", "", "Nats URL")
 	raftyMcRaftFace.PersistentFlags().CountVarP(&optionVerbose, "verbose", "v", "Increase verbosity")
 	raftyMcRaftFace.PersistentFlags().BoolVar(&optionLogCaller, "log-caller", false, "Log caller")
-	raftyMcRaftFace.PersistentFlags().BoolVar(&optionLogRaft, "log-raft", false, "Enable logs from raft library")
 	raftyMcRaftFace.PersistentFlags().BoolVar(&optionLogConsul, "log-consul", false, "Enable logs from consul library")
 }
 
@@ -95,7 +93,7 @@ func main() {
 }
 
 func run(cmd *cobra.Command, args []string) error {
-	logger, raftylogger, raftlogger, consullogger := loggers()
+	logger, raftylogger, consullogger := loggers()
 
 	logger.Info().Msgf("Starting RaftyMcRaftFace version=%s go=%s", Version, runtime.Version())
 
@@ -125,13 +123,12 @@ func run(cmd *cobra.Command, args []string) error {
 	options := []rafty.Option[string, RaftyMcRaftFaceWork[string]]{
 		rafty.RaftListeningAddressPort[string, RaftyMcRaftFaceWork[string]](optionBindAddress, optionPort),
 		rafty.RaftAdvertisedAddress[string, RaftyMcRaftFaceWork[string]](optionAdvertisedAddress),
-		rafty.Logger[string, RaftyMcRaftFaceWork[string]](raftylogger),
-		rafty.HCLogger[string, RaftyMcRaftFaceWork[string]](raftlogger),
+		rafty.WithLogger[string, RaftyMcRaftFaceWork[string]](raftylogger),
 	}
 
 	if optionModulo {
 		distrib, _ := distribmodulo.New[string, RaftyMcRaftFaceWork[string]]()
-		options = append(options, rafty.Distributor[string, RaftyMcRaftFaceWork[string]](distrib))
+		options = append(options, rafty.WithDistributor[string, RaftyMcRaftFaceWork[string]](distrib))
 	}
 
 LIMBO:
@@ -141,7 +138,7 @@ LIMBO:
 
 		// Rafty Disco
 		var err error
-		var discoverer interfaces.Discoverer
+		var discoverer rafty.Discoverer
 		if optionNats {
 			logger.Info().Msg("Using NATS KV discovery")
 			if discoverer, err = makeNatsKVDiscoverer(ctx, raftylogger); err != nil {
@@ -169,7 +166,7 @@ LIMBO:
 		}
 
 		// Rafty
-		r, err := rafty.New[string, RaftyMcRaftFaceWork[string]](discoverer, formeman, makeWork(&logger), options...)
+		r, err := rafty.New(discoverer, formeman, makeWork(&logger), options...)
 		if err != nil {
 			cancel()
 			logger.Trace().Err(err).Msg("New Rafty failed")
@@ -201,7 +198,7 @@ LIMBO:
 	return nil
 }
 
-func loggers() (logger zerolog.Logger, raftylogger interfaces.Logger, raftlogger hclog.Logger, consullogger hclog.Logger) {
+func loggers() (logger zerolog.Logger, raftylogger rafty.Logger, consullogger *log.Logger) {
 	zerolog.TimeFieldFormat = time.RFC3339Nano
 	consoleWriter := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: "Jan 2 15:04:05.000-0700"}
 	multi := zerolog.MultiLevelWriter(consoleWriter)
@@ -225,24 +222,17 @@ func loggers() (logger zerolog.Logger, raftylogger interfaces.Logger, raftlogger
 	// Rafty
 	raftylogger = &raftyzerolog.RaftyLogger{Logger: subLogger.With().Str("name", "rafty").Logger()}
 
-	// Raft
-	if optionLogRaft {
-		raftlogger = &raftyzerolog.HCLogger{Logger: subLogger}
-	} else {
-		raftlogger = hclog.NewNullLogger()
-	}
-
 	// Consul
 	if optionLogConsul {
-		consullogger = &raftyzerolog.HCLogger{Logger: subLogger}
+		consullogger = log.New(subLogger.With().Str("name", "consul").Logger(), "", 0)
 	} else {
-		consullogger = hclog.NewNullLogger()
+		consullogger = log.New(io.Discard, "", 0)
 	}
 
-	return logger, raftylogger, raftlogger, consullogger
+	return logger, raftylogger, consullogger
 }
 
-func makeNatsKVDiscoverer(ctx context.Context, logger interfaces.Logger) (interfaces.Discoverer, error) {
+func makeNatsKVDiscoverer(ctx context.Context, logger rafty.Logger) (rafty.Discoverer, error) {
 	var err error
 	var natsConn *nats.Conn
 
@@ -277,8 +267,8 @@ func makeNatsKVDiscoverer(ctx context.Context, logger interfaces.Logger) (interf
 	return natsKVDiscoverer, nil
 }
 
-func makeConsulServiceDiscoverer(ctx context.Context, logger interfaces.Logger, hclogger hclog.Logger) (interfaces.Discoverer, error) {
-	config := consul.DefaultConfigWithLogger(hclogger)
+func makeConsulServiceDiscoverer(ctx context.Context, logger rafty.Logger, consulLogger *log.Logger) (rafty.Discoverer, error) {
+	config := consul.DefaultConfig()
 	client, err := consul.NewClient(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to consul: %w", err)
@@ -289,7 +279,7 @@ func makeConsulServiceDiscoverer(ctx context.Context, logger interfaces.Logger, 
 		optionPort,
 		client,
 		discoconsul.Logger(logger),
-		discoconsul.HCLogger(hclogger),
+		discoconsul.ConsulLogger(consulLogger),
 		discoconsul.Name("raftymcraftface"),
 		discoconsul.Tags([]string{"raftymcraftface"}),
 	)
@@ -306,7 +296,7 @@ func makeConsulServiceDiscoverer(ctx context.Context, logger interfaces.Logger, 
 	return consulDiscoverer, nil
 }
 
-func makeDNSSRVDiscoverer(ctx context.Context, logger interfaces.Logger) (interfaces.Discoverer, error) {
+func makeDNSSRVDiscoverer(ctx context.Context, logger rafty.Logger) (rafty.Discoverer, error) {
 	dnsDiscoverer, err := discodns.NewSRVDiscoverer(optionDNSSRV, discodns.Logger(logger))
 	if err != nil {
 		return nil, err
@@ -317,7 +307,7 @@ func makeDNSSRVDiscoverer(ctx context.Context, logger interfaces.Logger) (interf
 	return dnsDiscoverer, nil
 }
 
-func makeLocalDiscoverer(ctx context.Context, _ interfaces.Logger) (interfaces.Discoverer, error) {
+func makeLocalDiscoverer(ctx context.Context, _ rafty.Logger) (rafty.Discoverer, error) {
 	localDiscoverer := &LocalDiscoverer{
 		advertisedAddr: optionAdvertisedAddress,
 		startPort:      10000,

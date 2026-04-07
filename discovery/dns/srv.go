@@ -8,32 +8,30 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hashicorp/raft"
 	"github.com/miekg/dns"
 
+	"sylr.dev/rafty"
 	"sylr.dev/rafty/discovery"
-	"sylr.dev/rafty/interfaces"
-	"sylr.dev/rafty/logger"
 )
 
 // SRVDiscoverer is a Rafty discoverer which leverages the use of DNS and SRV records.
 type SRVDiscoverer struct {
-	logger         interfaces.Logger
+	logger         rafty.Logger
 	client         *dns.Client
 	nameserver     string
 	record         string
 	interval       time.Duration
 	ch             chan struct{}
 	maxVoters      int
-	currentServers []raft.Server
+	currentServers []rafty.Server
 	mux            sync.Mutex
 }
 
-var _ interfaces.Discoverer = (*SRVDiscoverer)(nil)
+var _ rafty.Discoverer = (*SRVDiscoverer)(nil)
 
 type SRVOption func(*SRVDiscoverer) error
 
-func Logger(logger interfaces.Logger) SRVOption {
+func Logger(logger rafty.Logger) SRVOption {
 	return func(disco *SRVDiscoverer) error {
 		disco.logger = logger
 		return nil
@@ -84,7 +82,7 @@ func NewSRVDiscoverer(srvRecord string, options ...SRVOption) (*SRVDiscoverer, e
 	}
 
 	if d.logger == nil {
-		d.logger = &logger.NullLogger{}
+		d.logger = &rafty.NullLogger{}
 	}
 
 	if len(d.nameserver) == 0 {
@@ -133,7 +131,7 @@ func (d *SRVDiscoverer) NewServers() chan struct{} {
 	return d.ch
 }
 
-func (d *SRVDiscoverer) GetServers() []raft.Server {
+func (d *SRVDiscoverer) GetServers() []rafty.Server {
 	d.mux.Lock()
 	defer d.mux.Unlock()
 
@@ -144,7 +142,7 @@ func (d *SRVDiscoverer) GetServers() []raft.Server {
 	return d.currentServers
 }
 
-func (d *SRVDiscoverer) getServers() []raft.Server {
+func (d *SRVDiscoverer) getServers() []rafty.Server {
 	msgSrv := dns.Msg{}
 	msgSrv.SetQuestion(d.record, dns.TypeSRV)
 	msgSrv.SetEdns0(4096, true)
@@ -155,7 +153,7 @@ func (d *SRVDiscoverer) getServers() []raft.Server {
 		return nil
 	}
 
-	servers := make([]raft.Server, 0, len(respSrv.Answer))
+	servers := make([]rafty.Server, 0, len(respSrv.Answer))
 	for i, ansSrv := range respSrv.Answer {
 		if srv, ok := ansSrv.(*dns.SRV); ok {
 			msgA := dns.Msg{}
@@ -181,20 +179,20 @@ func (d *SRVDiscoverer) getServers() []raft.Server {
 				continue
 			}
 
-			suffrage := raft.Voter
+			suffrage := rafty.Voter
 			if l := len(servers); l > 8 {
-				suffrage = raft.Nonvoter
+				suffrage = rafty.Nonvoter
 			} else {
 				// Make the number of voters odd if cluster size greater than 3
 				if l > 3 && i == l-1 && i%2 == 1 {
-					suffrage = raft.Nonvoter
+					suffrage = rafty.Nonvoter
 				}
 			}
 
 			addrPort := fmt.Sprintf("%s:%d", a.A.String(), srv.Port)
-			servers = append(servers, raft.Server{
-				ID:       raft.ServerID(addrPort),
-				Address:  raft.ServerAddress(addrPort),
+			servers = append(servers, rafty.Server{
+				ID:       rafty.ServerID(addrPort),
+				Address:  rafty.ServerAddress(addrPort),
 				Suffrage: suffrage,
 			})
 		}

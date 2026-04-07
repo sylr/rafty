@@ -8,19 +8,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hashicorp/raft"
 	"github.com/nats-io/nats.go"
 
+	"sylr.dev/rafty"
 	"sylr.dev/rafty/discovery"
-	"sylr.dev/rafty/interfaces"
-	"sylr.dev/rafty/logger"
 )
 
 // KVDiscoverer is a Rafty discoverer which leverages the use of NATS JetStream
 // key values. This discoverer will register itself upon calling Start() and
 // deregister itself when terminated.
 type KVDiscoverer struct {
-	logger         interfaces.Logger
+	logger         rafty.Logger
 	advertisedAddr string
 	natsConn       *nats.Conn
 	jsContext      nats.JetStreamContext
@@ -29,11 +27,11 @@ type KVDiscoverer struct {
 	interval       time.Duration
 	ch             chan struct{}
 	done           chan struct{}
-	currentServers []raft.Server
+	currentServers []rafty.Server
 	mux            sync.Mutex
 }
 
-var _ interfaces.Discoverer = (*KVDiscoverer)(nil)
+var _ rafty.Discoverer = (*KVDiscoverer)(nil)
 
 type KVOption func(*KVDiscoverer) error
 
@@ -51,7 +49,7 @@ func JSBucket(bucket string) KVOption {
 	}
 }
 
-func Logger(logger interfaces.Logger) KVOption {
+func Logger(logger rafty.Logger) KVOption {
 	return func(disco *KVDiscoverer) error {
 		disco.logger = logger
 		return nil
@@ -84,7 +82,7 @@ func NewKVDiscoverer(advertisedAddr string, natsConn *nats.Conn, options ...KVOp
 	}
 
 	if d.logger == nil {
-		d.logger = &logger.NullLogger{}
+		d.logger = &rafty.NullLogger{}
 	}
 
 	if d.jsContext == nil {
@@ -206,7 +204,7 @@ func (d *KVDiscoverer) NewServers() chan struct{} {
 	return d.ch
 }
 
-func (d *KVDiscoverer) GetServers() []raft.Server {
+func (d *KVDiscoverer) GetServers() []rafty.Server {
 	d.mux.Lock()
 	defer d.mux.Unlock()
 
@@ -217,14 +215,14 @@ func (d *KVDiscoverer) GetServers() []raft.Server {
 	return d.currentServers
 }
 
-func (d *KVDiscoverer) getServers() []raft.Server {
+func (d *KVDiscoverer) getServers() []rafty.Server {
 	keys, err := d.jsKeyValue.Keys()
 	if err != nil {
 		d.logger.Errorf("disco-nats-kv: get keys: %s", err)
 		return nil
 	}
 
-	servers := make([]raft.Server, 0, len(keys))
+	servers := make([]rafty.Server, 0, len(keys))
 	for _, key := range keys {
 		rev, err := d.jsKeyValue.Get(key)
 		if err != nil {
@@ -242,10 +240,10 @@ func (d *KVDiscoverer) getServers() []raft.Server {
 		advertisedAddr = strings.ReplaceAll(advertisedAddr, "_", ".")
 
 		if lastUpdate.Add(d.interval + (5 * time.Second)).After(time.Now()) {
-			servers = append(servers, raft.Server{
-				ID:       raft.ServerID(advertisedAddr),
-				Address:  raft.ServerAddress(advertisedAddr),
-				Suffrage: raft.Voter,
+			servers = append(servers, rafty.Server{
+				ID:       rafty.ServerID(advertisedAddr),
+				Address:  rafty.ServerAddress(advertisedAddr),
+				Suffrage: rafty.Voter,
 			})
 		} else {
 			d.logger.Debugf("disco-nats-kv: discarding stale server: %s", advertisedAddr)

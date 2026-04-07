@@ -1,9 +1,9 @@
 // Package discovery contains utility functions for discovery.
 package discovery
 
-import "github.com/hashicorp/raft"
+import "sylr.dev/rafty"
 
-func ServersDiffer(source, target []raft.Server) bool {
+func ServersDiffer(source, target []rafty.Server) bool {
 	if len(source) != len(target) {
 		return true
 	}
