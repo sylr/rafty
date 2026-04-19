@@ -309,11 +309,19 @@ func makeDNSSRVDiscoverer(ctx context.Context, logger rafty.Logger) (rafty.Disco
 
 func makeLocalDiscoverer(ctx context.Context, _ rafty.Logger) (rafty.Discoverer, error) {
 	localDiscoverer := &LocalDiscoverer{
+		id:             rafty.ServerID(fmt.Sprintf("%d-%d", optionPort, time.Now().UnixNano())),
+		bindAddr:       optionBindAddress,
 		advertisedAddr: optionAdvertisedAddress,
+		port:           optionPort,
 		startPort:      10000,
 		clusterSize:    optionClusterSize,
-		ch:             make(chan struct{}),
-		interval:       time.Minute,
+		ch:             make(chan struct{}, 1),
+		recoveryCh:     make(chan struct{}, 1),
+		interval:       time.Second,
+		client: &http.Client{
+			Timeout: 200 * time.Millisecond,
+		},
+		done: make(chan struct{}),
 	}
 
 	go localDiscoverer.Start(ctx)

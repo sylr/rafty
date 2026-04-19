@@ -67,12 +67,15 @@ type raftNode[T any, T2 Work[T]] struct {
 	lead          uint64
 	isLeader      bool
 	leaderCh      chan bool
+	membershipCh  chan struct{}
 	stopCh        chan struct{}
 	doneCh        chan struct{}
 	confChangeSeq uint64
+	confState     raftpb.ConfState
+	state         RaftLog[T, T2]
 }
 
-func NewRaft[T any, T2 Work[T]](c RaftConfig, ch chan RaftLog[T, T2], initialServers []Server) (*raftNode[T, T2], error) {
+func NewRaft[T any, T2 Work[T]](c RaftConfig, ch chan RaftLog[T, T2], initialServers []Server, bootstrap bool) (*raftNode[T, T2], error) {
 	listen := fmt.Sprintf("%s:%d", c.ListeningAddress, c.ListeningPort)
 	n := &raftNode[T, T2]{
 		logger:   c.Logger,
@@ -82,12 +85,16 @@ func NewRaft[T any, T2 Work[T]](c RaftConfig, ch chan RaftLog[T, T2], initialSer
 		client: &http.Client{
 			Timeout: 3 * time.Second,
 		},
-		ch:        ch,
-		servers:   make(map[uint64]Server),
-		serverIDs: make(map[ServerID]uint64),
-		leaderCh:  make(chan bool, 8),
-		stopCh:    make(chan struct{}),
-		doneCh:    make(chan struct{}),
+		ch:           ch,
+		servers:      make(map[uint64]Server),
+		serverIDs:    make(map[ServerID]uint64),
+		leaderCh:     make(chan bool, 8),
+		membershipCh: make(chan struct{}, 8),
+		stopCh:       make(chan struct{}),
+		doneCh:       make(chan struct{}),
+		state: RaftLog[T, T2]{
+			Disco: make(map[ServerID][]T2),
+		},
 	}
 
 	n.setServers(initialServers)
@@ -104,15 +111,23 @@ func NewRaft[T any, T2 Work[T]](c RaftConfig, ch chan RaftLog[T, T2], initialSer
 		Logger:          etcdLogger{logger: c.Logger},
 	}
 
-	peers := make([]etcdraft.Peer, 0, len(initialServers))
-	for _, server := range initialServers {
+	if bootstrap {
+		peers := make([]etcdraft.Peer, 0, 1)
+		var self Server
+		for _, server := range initialServers {
+			if server.ID == c.ServerID {
+				self = server
+				break
+			}
+		}
 		peers = append(peers, etcdraft.Peer{
-			ID:      numericServerID(server.ID),
-			Context: mustJSON(server),
+			ID:      numericServerID(self.ID),
+			Context: mustJSON(self),
 		})
+		n.node = etcdraft.StartNode(cfg, peers)
+	} else {
+		n.node = etcdraft.RestartNode(cfg)
 	}
-
-	n.node = etcdraft.StartNode(cfg, peers)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(raftTransportPath, n.handleMessage)
@@ -149,6 +164,10 @@ func (n *raftNode[T, T2]) LeaderCh() <-chan bool {
 	return n.leaderCh
 }
 
+func (n *raftNode[T, T2]) MembershipCh() <-chan struct{} {
+	return n.membershipCh
+}
+
 func (n *raftNode[T, T2]) State() etcdraft.StateType {
 	return n.node.Status().RaftState
 }
@@ -167,6 +186,46 @@ func (n *raftNode[T, T2]) LeaderWithID() (string, ServerID) {
 	}
 
 	return string(server.Address), server.ID
+}
+
+func (n *raftNode[T, T2]) CurrentServers() []Server {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+
+	servers := make([]Server, 0, len(n.confState.Voters)+len(n.confState.Learners))
+	for _, id := range n.confState.Voters {
+		if server, ok := n.servers[id]; ok {
+			servers = append(servers, server)
+		}
+	}
+	for _, id := range n.confState.Learners {
+		if server, ok := n.servers[id]; ok {
+			servers = append(servers, server)
+		}
+	}
+
+	return servers
+}
+
+func (n *raftNode[T, T2]) CanPromote(id ServerID) bool {
+	n.mu.RLock()
+	numeric, ok := n.serverIDs[id]
+	n.mu.RUnlock()
+	if !ok {
+		return false
+	}
+
+	status := n.node.Status()
+	if status.RaftState != etcdraft.StateLeader {
+		return false
+	}
+
+	progress, ok := status.Progress[numeric]
+	if !ok {
+		return false
+	}
+
+	return progress.RecentActive && progress.Match >= atomic.LoadUint64(&n.lastIndex)
 }
 
 func (n *raftNode[T, T2]) Propose(data []byte) error {
@@ -264,6 +323,10 @@ func (n *raftNode[T, T2]) handleMessage(w http.ResponseWriter, r *http.Request) 
 	var msg raftpb.Message
 	if err := msg.Unmarshal(body); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if msg.To != 0 && msg.To != n.numeric {
+		http.Error(w, "message addressed to a different raft node id", http.StatusConflict)
 		return
 	}
 
@@ -365,6 +428,7 @@ func (n *raftNode[T, T2]) applyEntry(entry raftpb.Entry) {
 			return
 		}
 
+		n.state = logData
 		n.ch <- logData
 	case raftpb.EntryConfChange:
 		var cc raftpb.ConfChange
@@ -372,7 +436,9 @@ func (n *raftNode[T, T2]) applyEntry(entry raftpb.Entry) {
 			n.logger.Errorf("failed to unmarshal conf change: %v", err)
 			return
 		}
-		n.node.ApplyConfChange(cc)
+		if cs := n.node.ApplyConfChange(cc); cs != nil {
+			n.confState = *cs
+		}
 		n.applyConfChange(cc)
 	case raftpb.EntryConfChangeV2:
 		var cc raftpb.ConfChangeV2
@@ -380,7 +446,9 @@ func (n *raftNode[T, T2]) applyEntry(entry raftpb.Entry) {
 			n.logger.Errorf("failed to unmarshal conf change v2: %v", err)
 			return
 		}
-		n.node.ApplyConfChange(cc)
+		if cs := n.node.ApplyConfChange(cc); cs != nil {
+			n.confState = *cs
+		}
 	}
 }
 
@@ -402,6 +470,11 @@ func (n *raftNode[T, T2]) applyConfChange(cc raftpb.ConfChange) {
 			delete(n.serverIDs, server.ID)
 		}
 		delete(n.servers, cc.NodeID)
+	}
+
+	select {
+	case n.membershipCh <- struct{}{}:
+	default:
 	}
 }
 

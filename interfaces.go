@@ -32,6 +32,27 @@ type Discoverer interface {
 	GetServers() []Server
 }
 
+// ClusterSizer is the optional mechanism a discoverer can use to expose the
+// expected full cluster size for readiness gating.
+type ClusterSizer interface {
+	ExpectedServers() int
+}
+
+type RecoveryState struct {
+	Epoch       uint64
+	Seed        ServerID
+	Members     []Server
+	MinRequired int
+}
+
+// Recoverer is the optional mechanism a discoverer can use to coordinate
+// no-quorum recovery outside of Raft.
+type Recoverer interface {
+	RecoveryCh() chan struct{}
+	GetRecoveryState() RecoveryState
+	StartRecovery(self Server, live []Server) error
+}
+
 // Finalizer interface is used to finalize the discovery process.
 type Finalizer interface {
 	Done() chan struct{}

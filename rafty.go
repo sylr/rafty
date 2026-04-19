@@ -20,7 +20,12 @@ type Rafty[T any, T2 Work[T]] struct {
 	discoverer     Discoverer
 	foreman        Foreman[T, T2]
 	distributor    Distributor[T, T2]
+	discovered     []Server
 	currentServers []Server
+	recoveryEpoch  uint64
+	formationPhase bool
+	clusterReady   bool
+	expectedNodes  int
 
 	listeningAddress  string
 	listeningPort     int
@@ -29,6 +34,7 @@ type Rafty[T any, T2 Work[T]] struct {
 	ch          chan RaftLog[T, T2]
 	currentWork RaftLog[T, T2]
 	workCancel  map[string]context.CancelFunc
+	foremanOn   bool
 
 	startFunc func(context.Context, T2)
 	doneCh    chan struct{}
@@ -40,6 +46,7 @@ func New[T any, T2 Work[T]](disco Discoverer, foreman Foreman[T, T2], start func
 		startFunc:      start,
 		discoverer:     disco,
 		foreman:        foreman,
+		discovered:     make([]Server, 0),
 		currentServers: make([]Server, 0),
 		ch:             make(chan RaftLog[T, T2]),
 		currentWork: RaftLog[T, T2]{
@@ -70,8 +77,6 @@ func New[T any, T2 Work[T]](disco Discoverer, foreman Foreman[T, T2], start func
 	if len(r.advertisedAddress) == 0 {
 		r.advertisedAddress = "127.0.0.1"
 	}
-
-	r.raftID = ServerID(fmt.Sprintf("%s:%d", r.advertisedAddress, r.listeningPort))
 
 	return r, nil
 }
@@ -125,8 +130,10 @@ NEWSERVERS:
 	}
 
 	found := false
+	selfAddress := ServerAddress(fmt.Sprintf("%s:%d", r.advertisedAddress, r.listeningPort))
 	for _, server := range servers {
-		if server.ID == r.raftID {
+		if server.Address == selfAddress {
+			r.raftID = server.ID
 			found = true
 			break
 		}
@@ -137,7 +144,26 @@ NEWSERVERS:
 		goto NEWSERVERS
 	}
 
-	r.currentServers = servers
+	r.discovered = append([]Server(nil), servers...)
+	bootstrap := shouldBootstrap(servers, r.advertisedAddress, r.listeningPort)
+	if recoverer, ok := r.discoverer.(Recoverer); ok {
+		recovery := recoverer.GetRecoveryState()
+		if recovery.Epoch > 0 && len(recovery.Members) >= recovery.MinRequired {
+			r.recoveryEpoch = recovery.Epoch
+			r.formationPhase = true
+			servers = append([]Server(nil), recovery.Members...)
+			r.discovered = append([]Server(nil), recovery.Members...)
+			bootstrap = r.raftID == recovery.Seed
+		}
+	}
+	if sizer, ok := r.discoverer.(ClusterSizer); ok {
+		r.expectedNodes = sizer.ExpectedServers()
+	}
+	if bootstrap {
+		r.currentServers = []Server{{ID: r.raftID, Address: selfAddress, Suffrage: Voter}}
+	} else {
+		r.currentServers = nil
+	}
 
 	config := RaftConfig{
 		ListeningAddress:  r.listeningAddress,
@@ -148,7 +174,7 @@ NEWSERVERS:
 	}
 
 	var err error
-	r.raft, err = NewRaft(config, r.ch, servers)
+	r.raft, err = NewRaft(config, r.ch, servers, bootstrap)
 	if err != nil {
 		return nil, err
 	}
@@ -156,20 +182,47 @@ NEWSERVERS:
 	limboctx, limbocancel := context.WithCancel(context.Background())
 
 	go func(ctx context.Context) {
-		var candidate bool
-		var candidateSince time.Time
+		var recoverySince time.Time
+		var recoveryAttempted bool
+		recoverer, hasRecovery := r.discoverer.(Recoverer)
+		self := Server{ID: r.raftID, Address: selfAddress, Suffrage: Voter}
 		for {
 			select {
 			case <-time.After(5 * time.Second):
-				if r.raft.State() == etcdraft.StateCandidate {
-					if !candidate {
-						candidateSince = time.Now()
-					} else if time.Since(candidateSince) > 10*time.Second {
-						limbocancel()
+				liveCount := len(r.discovered)
+				required := (len(r.currentServers) / 2) + 1
+				minRecoveryMembers := required
+				leaderAddr, _ := r.raft.LeaderWithID()
+				noLeader := leaderAddr == ""
+				membershipChanged := ServersDiffer(r.currentServers, r.discovered)
+				if hasRecovery {
+					if state := recoverer.GetRecoveryState(); state.MinRequired > minRecoveryMembers {
+						minRecoveryMembers = state.MinRequired
 					}
-					candidate = true
+				}
+				needsRecovery := len(r.currentServers) > 0 &&
+					noLeader &&
+					liveCount >= minRecoveryMembers &&
+					membershipChanged
+				if needsRecovery {
+					if recoverySince.IsZero() {
+						recoverySince = time.Now()
+					} else if time.Since(recoverySince) > 10*time.Second {
+						if hasRecovery {
+							if !recoveryAttempted {
+								r.logger.Warnf("Attempting discovery-led recovery with %d/%d live members", liveCount, len(r.currentServers))
+								if err := recoverer.StartRecovery(self, r.discovered); err != nil {
+									r.logger.Errorf("Failed to start recovery: %v", err)
+								}
+								recoveryAttempted = true
+							}
+						} else {
+							limbocancel()
+						}
+					}
 				} else {
-					candidate = false
+					recoverySince = time.Time{}
+					recoveryAttempted = false
 				}
 
 			case newWork := <-r.ch:
@@ -196,36 +249,102 @@ NEWSERVERS:
 	}(ctx)
 
 	go func(ctx context.Context) {
+		recoverer, hasRecovery := r.discoverer.(Recoverer)
+		reconcileTicker := time.NewTicker(time.Second)
+		defer reconcileTicker.Stop()
 		for {
 			select {
 			case leader := <-r.raft.LeaderCh():
 				if leader {
-					r.logger.Infof("This node is now the leader, starting the foreman")
-					r.foreman.Start()
-					r.updateServers(r.discoverer.GetServers())
-					r.leader(r.foreman.GetWorks())
+					if r.formationPhase {
+						r.logger.Infof("This node is now the leader, forming the recovery cluster")
+					} else if r.shouldActivateWork(recoverer, hasRecovery) {
+						r.logger.Infof("This node is now the leader, starting the foreman")
+						r.startForeman()
+					} else {
+						r.logger.Infof("This node is now the leader, waiting for cluster readiness")
+					}
+					r.currentServers = r.raft.CurrentServers()
+					r.updateServers(r.discovered)
+					if r.shouldStartForeman(recoverer, hasRecovery) {
+						r.finishFormation()
+					} else if r.shouldActivateWork(recoverer, hasRecovery) {
+						r.leader(r.foreman.GetWorks())
+					}
 				} else {
 					r.logger.Infof("This node is no longer the leader, stoping the foreman")
-					r.foreman.Stop()
+					r.stopForeman()
+				}
+
+			case <-r.raft.MembershipCh():
+				r.currentServers = r.raft.CurrentServers()
+				if r.raft.State() != etcdraft.StateLeader {
+					continue
+				}
+
+				if ServersDiffer(r.currentServers, r.discovered) {
+					r.updateServers(r.discovered)
+				}
+
+				r.logger.Infof("Applied new raft membership: %v", r.currentServers)
+				if r.shouldStartForeman(recoverer, hasRecovery) {
+					r.finishFormation()
+				} else if r.shouldActivateWork(recoverer, hasRecovery) {
+					r.leader(r.foreman.GetWorks())
 				}
 
 			case <-r.discoverer.NewServers():
 				servers := r.discoverer.GetServers()
 
-				r.logger.Infof("Received new servers from discovery: %v", servers)
+				if ServersDiffer(r.discovered, servers) {
+					r.discovered = append(r.discovered[:0], servers...)
+					r.logger.Infof("Received new servers from discovery: %v", servers)
 
+					if r.raft.State() != etcdraft.StateLeader {
+						continue
+					}
+
+					r.logger.Infof("Apply new servers from discovery: %v", servers)
+
+					r.updateServers(servers)
+					if r.shouldStartForeman(recoverer, hasRecovery) {
+						r.finishFormation()
+					} else if r.shouldActivateWork(recoverer, hasRecovery) && !r.foremanOn {
+						r.logger.Infof("Cluster is now ready, starting the foreman")
+						r.startForeman()
+						r.leader(r.foreman.GetWorks())
+					}
+				}
+
+			case <-reconcileTicker.C:
 				if r.raft.State() != etcdraft.StateLeader {
-					r.currentServers = servers
+					continue
+				}
+				r.currentServers = r.raft.CurrentServers()
+				if ServersDiffer(r.currentServers, r.discovered) {
+					r.updateServers(r.discovered)
+				}
+				if r.shouldStartForeman(recoverer, hasRecovery) {
+					r.finishFormation()
+				}
+
+			case <-func() chan struct{} {
+				if !hasRecovery {
+					return nil
+				}
+				return recoverer.RecoveryCh()
+			}():
+				state := recoverer.GetRecoveryState()
+				if state.Epoch <= r.recoveryEpoch {
 					continue
 				}
 
-				r.logger.Infof("Apply new servers from discovery: %v", servers)
-
-				r.updateServers(servers)
-				r.leader(r.foreman.GetWorks())
+				r.logger.Warnf("Detected recovery epoch change from %d to %d", r.recoveryEpoch, state.Epoch)
+				r.recoveryEpoch = state.Epoch
+				limbocancel()
 
 			case <-r.foreman.NewWorks():
-				if r.raft.State() != etcdraft.StateLeader {
+				if r.raft.State() != etcdraft.StateLeader || r.formationPhase {
 					continue
 				}
 
@@ -275,6 +394,70 @@ func (r *Rafty[T, T2]) Done() chan struct{} {
 	return r.doneCh
 }
 
+func (r *Rafty[T, T2]) startForeman() {
+	if r.foremanOn {
+		return
+	}
+	r.foreman.Start()
+	r.foremanOn = true
+}
+
+func (r *Rafty[T, T2]) stopForeman() {
+	if r.foremanOn {
+		r.foreman.Stop()
+		r.foremanOn = false
+	}
+	r.cancelAllWork()
+}
+
+func (r *Rafty[T, T2]) fullClusterReady() bool {
+	if r.expectedNodes <= 0 {
+		return len(r.currentServers) > 0 && !ServersDiffer(r.currentServers, r.discovered)
+	}
+	return len(r.discovered) >= r.expectedNodes &&
+		len(r.currentServers) >= r.expectedNodes &&
+		!ServersDiffer(r.currentServers, r.discovered)
+}
+
+func (r *Rafty[T, T2]) shouldActivateWork(recoverer Recoverer, hasRecovery bool) bool {
+	if r.raft.State() != etcdraft.StateLeader || r.formationPhase {
+		return false
+	}
+	if r.clusterReady {
+		return true
+	}
+	if !r.fullClusterReady() {
+		return false
+	}
+	r.clusterReady = true
+	return true
+}
+
+func (r *Rafty[T, T2]) shouldStartForeman(recoverer Recoverer, hasRecovery bool) bool {
+	if !r.formationPhase || r.raft.State() != etcdraft.StateLeader {
+		return false
+	}
+	if !r.fullClusterReady() {
+		return false
+	}
+	if !hasRecovery {
+		return true
+	}
+	state := recoverer.GetRecoveryState()
+	return len(r.currentServers) >= state.MinRequired
+}
+
+func (r *Rafty[T, T2]) finishFormation() {
+	if !r.formationPhase {
+		return
+	}
+	r.formationPhase = false
+	r.clusterReady = true
+	r.logger.Infof("Recovery cluster formed, starting the foreman")
+	r.startForeman()
+	r.leader(r.foreman.GetWorks())
+}
+
 func (r *Rafty[T, T2]) leader(newWork []T2) {
 	distributed := r.distributor.Distribute(r.currentServers, newWork)
 	r.logger.Infof("Distributed work: %v", distributed)
@@ -310,12 +493,16 @@ func (r *Rafty[T, T2]) removeServer(id ServerID) {
 }
 
 func (r *Rafty[T, T2]) updateServers(servers []Server) {
+	promotions := make([]Server, 0)
+
 	for _, server := range servers {
 		found := false
 		updated := false
+		currentSuffrage := server.Suffrage
 		for _, currentServer := range r.currentServers {
 			if server.ID == currentServer.ID {
 				found = true
+				currentSuffrage = currentServer.Suffrage
 				if server != currentServer {
 					updated = true
 				}
@@ -324,11 +511,32 @@ func (r *Rafty[T, T2]) updateServers(servers []Server) {
 		}
 
 		if !found || updated {
-			r.logger.Debugf("Adding server to cluster: %s found=%v updated=%v", server.ID, found, updated)
-			if err := r.raft.AddServer(server); err != nil {
+			candidate := server
+			if !found && candidate.Suffrage == Voter {
+				candidate.Suffrage = Nonvoter
+			}
+			if found && currentSuffrage == Nonvoter && server.Suffrage == Voter {
+				promotions = append(promotions, server)
+				continue
+			}
+
+			r.logger.Debugf("Adding server to cluster: %s found=%v updated=%v suffrage=%v", candidate.ID, found, updated, candidate.Suffrage)
+			if err := r.raft.AddServer(candidate); err != nil {
 				r.logger.Errorf("Failed to add server to cluster: %s", err)
 			}
+			return
 		}
+	}
+
+	for _, server := range promotions {
+		if !r.raft.CanPromote(server.ID) {
+			continue
+		}
+		r.logger.Debugf("Promoting server to voter: %s", server.ID)
+		if err := r.raft.AddServer(server); err != nil {
+			r.logger.Errorf("Failed to promote server to voter: %s", err)
+		}
+		return
 	}
 
 	for _, currentServer := range r.currentServers {
@@ -345,10 +553,10 @@ func (r *Rafty[T, T2]) updateServers(servers []Server) {
 				r.logger.Errorf("Failed to remove server from cluster: %s", err)
 				return
 			}
+			return
 		}
 	}
 
-	r.currentServers = servers
 }
 
 func (r *Rafty[T, T2]) manageWork(newWork RaftLog[T, T2]) {
@@ -415,4 +623,21 @@ func (defaultDistributor[T, T2]) Distribute(servers []Server, works []T2) map[Se
 	}
 
 	return output
+}
+
+func shouldBootstrap(servers []Server, advertisedAddress string, port int) bool {
+	selfAddress := ServerAddress(fmt.Sprintf("%s:%d", advertisedAddress, port))
+	voters := make([]Server, 0, len(servers))
+	for _, server := range servers {
+		if server.Suffrage == Voter {
+			voters = append(voters, server)
+		}
+	}
+	if len(voters) == 0 {
+		return false
+	}
+	sort.Slice(voters, func(i, j int) bool {
+		return voters[i].Address < voters[j].Address
+	})
+	return voters[0].Address == selfAddress
 }
